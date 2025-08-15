@@ -1,0 +1,10 @@
+# Archivos compilados
+*.out
+*.o
+
+# Build files de rust
+target
+debug
+
+# Logs
+*.log
