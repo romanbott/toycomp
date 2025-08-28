@@ -3,8 +3,6 @@ use std::collections::VecDeque;
 mod shunting_yard;
 use shunting_yard::{Atom, regex_to_atoms};
 
-
-
 #[derive(Clone, Copy, Debug)]
 enum Arrow {
     Empty(usize),
@@ -82,6 +80,22 @@ fn kleene(automaton: &Automaton) -> Automaton {
     automaton
 }
 
+fn positive_clousure(automaton: &Automaton) -> Automaton {
+    let mut automaton = automaton.clone();
+
+    automaton.trans[automaton.final_state].push(Arrow::Empty(automaton.starting));
+
+    automaton
+}
+
+fn zero_or_one(automaton: &Automaton) -> Automaton {
+    let mut automaton = automaton.clone();
+
+    automaton.trans[automaton.starting].push(Arrow::Empty(automaton.final_state));
+
+    automaton
+}
+
 fn or(left: &Automaton, right: &Automaton) -> Automaton {
     let mut joined = join(left, right);
 
@@ -124,7 +138,6 @@ impl Automaton {
     }
 
     fn from_atoms(atoms: VecDeque<Atom>) -> Automaton {
-
         let mut automatons: Vec<Automaton> = vec![];
 
         for atom in atoms {
@@ -132,26 +145,30 @@ impl Automaton {
                 Atom::Kleene => {
                     let last = automatons.pop().unwrap();
                     automatons.push(kleene(&last));
-                },
+                }
                 Atom::Concat => {
                     let first = automatons.pop().unwrap();
                     let second = automatons.pop().unwrap();
                     automatons.push(concat(&second, &first));
-                },
+                }
                 Atom::Or => {
                     let first = automatons.pop().unwrap();
                     let second = automatons.pop().unwrap();
                     automatons.push(or(&second, &first));
-                },
+                }
                 Atom::Character(c) => automatons.push(Automaton::from_char(c)),
+                Atom::Plus => {
+                    let last = automatons.pop().unwrap();
+                    automatons.push(positive_clousure(&last));
+                }
+                Atom::Question => {
+                    let last = automatons.pop().unwrap();
+                    automatons.push(zero_or_one(&last));
+                }
                 Atom::OpenParen => unreachable!(),
                 Atom::CloseParen => unreachable!(),
-                Atom::Plus => unimplemented!(),
-                Atom::Question => unimplemented!(),
             }
-
         }
-
 
         automatons.pop().unwrap()
     }
@@ -199,7 +216,6 @@ impl Automaton {
         states.contains(&self.final_state)
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -339,10 +355,35 @@ mod tests {
         assert!(!a_kleene.accept("ab"));
     }
 
+    #[test]
+    fn test_positive_clousure() {
+        let a = Automaton::from_char('a');
+
+        let aut = positive_clousure(&a);
+
+        assert!(!aut.accept(""));
+        assert!(aut.accept("a"));
+        assert!(aut.accept("aa"));
+        assert!(aut.accept("aaaaaaa"));
+        assert!(!aut.accept("ab"));
+    }
+
+    #[test]
+    fn test_zero_or_one() {
+        let a = Automaton::from_char('a');
+
+        let aut = zero_or_one(&a);
+
+        assert!(aut.accept(""));
+        assert!(aut.accept("a"));
+        assert!(!aut.accept("aa"));
+        assert!(!aut.accept("aaaaaaa"));
+        assert!(!aut.accept("ab"));
+        assert!(!aut.accept("b"));
+    }
 
     #[test]
     fn test_automaton_from_atoms() {
-
         let aut = Automaton::from_atoms(regex_to_atoms("a*|b"));
 
         assert!(aut.accept(""));
@@ -353,7 +394,6 @@ mod tests {
 
     #[test]
     fn test_automaton_from_regex() {
-
         let aut = Automaton::from_regex("((a*|b)c)*");
 
         assert!(aut.accept(""));
