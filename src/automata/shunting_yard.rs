@@ -1,13 +1,37 @@
-#[derive(Debug, PartialEq)]
-enum Atom {
+use std::collections::VecDeque;
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum Atom {
     Kleene,
-    Concat,
-    Or,
     Plus,
     Question,
+    Concat,
+    Or,
     OpenParen,
     CloseParen,
     Character(char),
+}
+
+impl Atom {
+    fn is_operator(&self) -> bool {
+        match self {
+            Atom::Character(_) => false,
+            _ => true,
+        }
+    }
+
+    fn precedence(&self) -> u8 {
+        match self {
+            Atom::Kleene => 8,
+            Atom::Plus => 8,
+            Atom::Question => 8,
+            Atom::Concat => 7,
+            Atom::Or => 6,
+            Atom::OpenParen => 5,
+            Atom::CloseParen => 5,
+            Atom::Character(_) => 5,
+        }
+    }
 }
 
 impl From<&char> for Atom {
@@ -62,6 +86,77 @@ fn explicit_concat(input: &str) -> Vec<Atom> {
     }
 
     output
+}
+
+#[derive(Debug)]
+struct ShuntingYard {
+    input: VecDeque<Atom>,
+    output: VecDeque<Atom>,
+    operator_stack: Vec<Atom>,
+}
+
+impl ShuntingYard {
+    fn new(input: &str) -> ShuntingYard {
+        ShuntingYard {
+            input: explicit_concat(input).into(),
+            output: VecDeque::new(),
+            operator_stack: vec![],
+        }
+    }
+
+    fn consume_next(&mut self) -> () {
+        let current = self.input.pop_front().unwrap();
+
+        if current.is_operator() {
+            self.process_operator(current)
+        } else {
+            self.output.push_back(current);
+        }
+    }
+
+    fn process_operator(&mut self, current: Atom) {
+        match &current {
+            Atom::OpenParen => self.operator_stack.push(current),
+            Atom::CloseParen => {
+                while let Some(a) = self.operator_stack.pop() {
+                    if matches!(a, Atom::OpenParen) {
+                        break;
+                    } else {
+                        self.output.push_back(a);
+                    }
+                }
+            }
+            Atom::Character(_) => {
+                unreachable!("There should not be Character's in the opreator stack")
+            }
+            current => {
+                while let Some(a) = self.operator_stack.pop() {
+                    if matches!(a, Atom::OpenParen) {
+                        self.operator_stack.push(a);
+                        self.operator_stack.push(*current);
+                        break;
+                    } else if a.precedence() >= current.precedence() {
+                        self.output.push_back(a);
+                    } else {
+                        self.operator_stack.push(*current);
+                        break;
+                    }
+                }
+                if self.operator_stack.is_empty() {
+                    self.operator_stack.push(*current);
+                }
+            }
+        }
+    }
+
+    fn to_rpn(&mut self) {
+        while !self.input.is_empty() {
+            self.consume_next();
+        }
+        while !self.operator_stack.is_empty() {
+            self.output.push_back(self.operator_stack.pop().unwrap());
+        }
+    }
 }
 
 #[cfg(test)]
@@ -125,6 +220,72 @@ mod tests {
             Atom::CloseParen,
         ];
         let result = explicit_concat(input);
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_sy1() {
+        let input = "a*|b";
+        let expected = vec![
+            Atom::Character('a'),
+            Atom::Kleene,
+            Atom::Character('b'),
+            Atom::Or,
+        ];
+        let mut st = ShuntingYard::new(input);
+        st.to_rpn();
+        let result = st.output;
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_sy2() {
+        let input = "a*c|b";
+        let expected = vec![
+            Atom::Character('a'),
+            Atom::Kleene,
+            Atom::Character('c'),
+            Atom::Concat,
+            Atom::Character('b'),
+            Atom::Or,
+        ];
+        let mut st = ShuntingYard::new(input);
+        st.to_rpn();
+        assert_eq!(st.output, expected);
+    }
+
+    #[test]
+    fn test_sy3() {
+        let input = "a*(c|b)";
+        let expected = vec![
+            Atom::Character('a'),
+            Atom::Kleene,
+            Atom::Character('c'),
+            Atom::Character('b'),
+            Atom::Or,
+            Atom::Concat,
+        ];
+        let mut st = ShuntingYard::new(input);
+        st.to_rpn();
+        assert_eq!(st.output, expected);
+    }
+
+    #[test]
+    fn test_sy4() {
+        let input = "(a*)(c|b)";
+        let expected = vec![
+            Atom::Character('a'),
+            Atom::Kleene,
+            Atom::Character('c'),
+            Atom::Character('b'),
+            Atom::Or,
+            Atom::Concat,
+        ];
+        let mut st = ShuntingYard::new(input);
+        dbg!(&st);
+        st.to_rpn();
+        dbg!(&st);
+        let result = st.output;
         assert_eq!(result, expected);
     }
 }
