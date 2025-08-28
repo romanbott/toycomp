@@ -51,7 +51,7 @@ impl Arrow {
 ///
 /// The automaton is defined by a table of transitions, the starting state, and the final state.
 #[derive(Debug, Clone)]
-struct Automaton {
+pub struct Automaton {
     /// Table of transitions, each row represents a state.
     table: Vec<Vec<Arrow>>,
     starting: usize,
@@ -272,7 +272,7 @@ impl Automaton {
     ///
     /// The simulation proceeds by iteratively calculating the epsilon closure
     /// and then performing a character-based step for each character in the input.
-    fn accept(&self, input: &str) -> bool {
+    pub fn accept(&self, input: &str) -> bool {
         let mut states = vec![self.starting];
 
         for char in input.chars() {
