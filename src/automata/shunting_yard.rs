@@ -63,6 +63,7 @@ fn explicit_concat(input: &str) -> Vec<Atom> {
     while let Some(current_char) = chars.next() {
         output.push((&current_char).into());
 
+        // TODO; refactor
         if let Some(&next_char) = chars.peek() {
             let should_insert_concat =
                 // Case 1: Concatenation of two non-operators (e.g., "ab")
@@ -74,7 +75,9 @@ fn explicit_concat(input: &str) -> Vec<Atom> {
                 // Case 4: Concatenation of a closing parenthesis and an opening parenthesis (e.g., "(a)(b)")
                 || (current_char == ')' && next_char == '(')
                 // Case 5: Concatenation of a unary operator and an opening parenthesis (e.g., "a*(b)")
-                || (is_unary(&current_char) && next_char == '(');
+                || (is_unary(&current_char) && next_char == '(')
+                // Case 6: Concatenation of a not operator and an opening parenthesis (e.g., "a*(b)")
+                || (!is_operator(&current_char) && next_char == '(');
 
             if should_insert_concat {
                 output.push(Atom::Concat);
@@ -316,6 +319,23 @@ mod tests {
             Atom::Kleene,
             Atom::Concat,
             Atom::Character('c'),
+            Atom::Concat,
+        ];
+        let mut st = ShuntingYard::new(input);
+        st.to_rpn();
+        assert_eq!(st.output, expected);
+    }
+
+    #[test]
+    fn test_sy6() {
+        let input = "a(b|c)d";
+        let expected = vec![
+            Atom::Character('a'),
+            Atom::Character('b'),
+            Atom::Character('c'),
+            Atom::Or,
+            Atom::Concat,
+            Atom::Character('d'),
             Atom::Concat,
         ];
         let mut st = ShuntingYard::new(input);
