@@ -403,3 +403,145 @@ mod tests {
         assert!(!aut.accept("aa"));
     }
 }
+
+#[cfg(test)]
+mod tests_adrian {
+
+    use super::*;
+
+    #[test]
+    fn test_plus() {
+        let aut = Automaton::from_regex("a+");
+
+        assert!(aut.accept("a"));
+        assert!(aut.accept("aa"));
+        assert!(aut.accept("aaaa"));
+        assert!(!aut.accept(""));
+        assert!(!aut.accept("b"));
+    }
+
+    #[test]
+    fn test_optional() {
+        let aut = Automaton::from_regex("a?");
+
+        assert!(aut.accept(""));
+        assert!(aut.accept("a"));
+        assert!(!aut.accept("aa"));
+        assert!(!aut.accept("b"));
+    }
+
+    #[test]
+    fn test_union() {
+        let aut = Automaton::from_regex("a|b");
+
+        assert!(aut.accept("a"));
+        assert!(aut.accept("b"));
+        assert!(!aut.accept(""));
+        assert!(!aut.accept("c"));
+        assert!(!aut.accept("ab"));
+    }
+
+    #[test]
+    fn test_precedence_concat_over_union() {
+        let aut = Automaton::from_regex("ab|c");
+
+        assert!(aut.accept("ab"));
+        assert!(aut.accept("c"));
+        assert!(!aut.accept("a"));
+        assert!(!aut.accept("b"));
+        assert!(!aut.accept("ac"));
+    }
+
+    #[test]
+    fn test_precedence_kleen_over_concat() {
+        let aut = Automaton::from_regex("ab*c");
+
+        assert!(aut.accept("ac"));
+        assert!(aut.accept("abc"));
+        assert!(aut.accept("abbbc"));
+        assert!(!aut.accept("a"));
+        assert!(!aut.accept("c"));
+        assert!(!aut.accept("ab"));
+        assert!(!aut.accept("bc"));
+    }
+
+    #[test]
+    fn test_grouping_kleene() {
+        let aut = Automaton::from_regex("(a|b)*");
+
+        assert!(aut.accept(""));
+        assert!(aut.accept("a"));
+        assert!(aut.accept("b"));
+        assert!(aut.accept("aa"));
+        assert!(aut.accept("bb"));
+        assert!(aut.accept("ab"));
+        assert!(aut.accept("ba"));
+        assert!(aut.accept("bababa"));
+        assert!(!aut.accept("c"));
+        assert!(!aut.accept("ac"));
+        assert!(!aut.accept("bc"));
+    }
+
+    #[test]
+    fn test_concat_with_group_union() {
+        let aut = Automaton::from_regex("a(b|c)d");
+
+        assert!(aut.accept("abd"));
+        assert!(aut.accept("acd"));
+        assert!(!aut.accept("ad"));
+        assert!(!aut.accept("abcd"));
+        assert!(!aut.accept("abd d"));
+    }
+
+    #[test]
+    fn test_complex_nesting() {
+        let aut = Automaton::from_regex("a(b*|c+)?d");
+
+        assert!(aut.accept("ad"));
+        assert!(aut.accept("abd"));
+        assert!(aut.accept("abbbd"));
+        assert!(aut.accept("acd"));
+        assert!(aut.accept("acccd"));
+        assert!(!aut.accept("a c d"));
+        assert!(!aut.accept("abcd"));
+        assert!(!aut.accept("abbc"));
+    }
+
+    #[test]
+    fn test_nested_kleene() {
+        let aut = Automaton::from_regex("(a*)*");
+
+        assert!(aut.accept(""));
+        assert!(aut.accept("a"));
+        assert!(aut.accept("aa"));
+        assert!(!aut.accept("b"));
+    }
+
+
+    #[test]
+    fn test_optional_inside_concat() {
+        let aut = Automaton::from_regex("a(b?)c");
+
+        assert!(aut.accept("ac"));
+        assert!(aut.accept("abc"));
+        assert!(!aut.accept("a"));
+        assert!(!aut.accept("c"));
+        assert!(!aut.accept("ab"));
+        assert!(!aut.accept("bc"));
+    }
+
+    #[test]
+    fn test_contains_at_least_one_a() {
+        let aut = Automaton::from_regex("(a|b)*a(a|b)*");
+
+        let accepted = ["a", "aa", "ab", "ba", "bab", "bbaabb"];
+        let rejected = ["", "b", "bb", "bbbb"];
+
+        for input in accepted {
+            assert!(aut.accept(input));
+        }
+        for input in rejected {
+            assert!(!aut.accept(input));
+        }
+    }
+}
