@@ -135,6 +135,7 @@ impl ShuntingYard {
                     } else if a.precedence() >= current.precedence() {
                         self.output.push_back(a);
                     } else {
+                        self.operator_stack.push(a);
                         self.operator_stack.push(*current);
                         break;
                     }
@@ -148,6 +149,7 @@ impl ShuntingYard {
 
     fn to_rpn(&mut self) {
         while !self.input.is_empty() {
+            dbg!(&self);
             self.consume_next();
         }
         while !self.operator_stack.is_empty() {
@@ -157,9 +159,9 @@ impl ShuntingYard {
 }
 
 pub fn regex_to_atoms(regex: &str) -> VecDeque<Atom> {
-        let mut st = ShuntingYard::new(regex);
-        st.to_rpn();
-        st.output
+    let mut st = ShuntingYard::new(regex);
+    st.to_rpn();
+    st.output
 }
 
 #[cfg(test)]
@@ -183,12 +185,14 @@ mod tests {
 
     #[test]
     fn test_basic_concat_after_unary() {
-        let input = "a*b";
+        let input = "ab*c";
         let expected = vec![
             Atom::Character('a'),
-            Atom::Kleene,
             Atom::Concat,
             Atom::Character('b'),
+            Atom::Kleene,
+            Atom::Concat,
+            Atom::Character('c'),
         ];
 
         let result = explicit_concat(input);
@@ -221,6 +225,19 @@ mod tests {
             Atom::OpenParen,
             Atom::Character('b'),
             Atom::CloseParen,
+        ];
+        let result = explicit_concat(input);
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_char_after_kleen() {
+        let input = "a*b";
+        let expected = vec![
+            Atom::Character('a'),
+            Atom::Kleene,
+            Atom::Concat,
+            Atom::Character('b'),
         ];
         let result = explicit_concat(input);
         assert_eq!(result, expected);
@@ -285,10 +302,24 @@ mod tests {
             Atom::Concat,
         ];
         let mut st = ShuntingYard::new(input);
-        dbg!(&st);
         st.to_rpn();
-        dbg!(&st);
         let result = st.output;
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_sy5() {
+        let input = "ab*c";
+        let expected = vec![
+            Atom::Character('a'),
+            Atom::Character('b'),
+            Atom::Kleene,
+            Atom::Concat,
+            Atom::Character('c'),
+            Atom::Concat,
+        ];
+        let mut st = ShuntingYard::new(input);
+        st.to_rpn();
+        assert_eq!(st.output, expected);
     }
 }
