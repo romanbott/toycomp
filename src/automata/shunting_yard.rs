@@ -1,46 +1,61 @@
 use std::collections::VecDeque;
 
+/// Represents a token in a regular expression.
+///
+/// This enum includes literal characters and all supported operators.
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum Atom {
+pub enum RegexToken {
+    /// The Kleene star operator (`*`), for zero or more repetitions.
     Kleene,
-    Plus,
-    Question,
+    /// The positive closure operator (`+`), for one or more repetitions.
+    PositiveClosure,
+    /// The optionality operator (`?`), for zero or one repetition.
+    Optional,
+    /// The concatenation operator (implicitly added), for joining expressions.
     Concat,
-    Or,
+    /// The union operator (`|`).
+    Union,
+    /// An opening parenthesis (`(`).
     OpenParen,
+    /// A closing parenthesis (`)`).
     CloseParen,
+    /// A literal character.
     Character(char),
 }
 
-impl Atom {
+impl RegexToken {
+    /// Checks if the token is an operator.
     fn is_operator(&self) -> bool {
-        !matches!(self, Atom::Character(_))
+        !matches!(self, RegexToken::Character(_))
     }
 
+    /// Returns the precedence of an operator. Higher numbers mean higher precedence.
+    /// This is crucial for the Shunting-yard algorithm.
     fn precedence(&self) -> u8 {
         match self {
-            Atom::Kleene => 8,
-            Atom::Plus => 8,
-            Atom::Question => 8,
-            Atom::Concat => 7,
-            Atom::Or => 6,
-            Atom::OpenParen => 5,
-            Atom::CloseParen => 5,
-            Atom::Character(_) => 5,
+            RegexToken::Kleene => 8,
+            RegexToken::PositiveClosure => 8,
+            RegexToken::Optional => 8,
+            RegexToken::Concat => 7,
+            RegexToken::Union => 6,
+            RegexToken::OpenParen => 5,
+            RegexToken::CloseParen => 5,
+            RegexToken::Character(_) => 0,
         }
     }
 }
 
-impl From<&char> for Atom {
+/// Converts a character into its corresponding `RegexToken` representation.
+impl From<&char> for RegexToken {
     fn from(value: &char) -> Self {
         match value {
-            '*' => Atom::Kleene,
-            '+' => Atom::Plus,
-            '?' => Atom::Question,
-            '|' => Atom::Or,
-            '(' => Atom::OpenParen,
-            ')' => Atom::CloseParen,
-            c => Atom::Character(*c),
+            '*' => RegexToken::Kleene,
+            '+' => RegexToken::PositiveClosure,
+            '?' => RegexToken::Optional,
+            '|' => RegexToken::Union,
+            '(' => RegexToken::OpenParen,
+            ')' => RegexToken::CloseParen,
+            c => RegexToken::Character(*c),
         }
     }
 }
@@ -48,17 +63,23 @@ impl From<&char> for Atom {
 const OPERATORS: [char; 6] = ['*', '+', '?', '|', '(', ')'];
 const UNARY_OPERATORS: [char; 3] = ['*', '+', '?'];
 
+/// Checks if a character is a regex operator.
 fn is_operator(input: &char) -> bool {
     OPERATORS.contains(input)
 }
 
+/// Checks if a character is a unary operator (applies to a single preceding operand).
 fn is_unary(input: &char) -> bool {
     UNARY_OPERATORS.contains(input)
 }
 
-fn explicit_concat(input: &str) -> Vec<Atom> {
+/// Inserts explicit concatenation operators into the regular expression.
+///
+/// This is a preprocessing step for the Shunting-yard algorithm, which
+/// expects all operators to be explicitly present.
+fn explicit_concat(input: &str) -> Vec<RegexToken> {
     let mut chars = input.chars().peekable();
-    let mut output: Vec<Atom> = Vec::new();
+    let mut output: Vec<RegexToken> = Vec::new();
 
     while let Some(current_char) = chars.next() {
         output.push((&current_char).into());
@@ -80,7 +101,7 @@ fn explicit_concat(input: &str) -> Vec<Atom> {
                 || (!is_operator(&current_char) && next_char == '(');
 
             if should_insert_concat {
-                output.push(Atom::Concat);
+                output.push(RegexToken::Concat);
             }
         }
     }
@@ -88,14 +109,19 @@ fn explicit_concat(input: &str) -> Vec<Atom> {
     output
 }
 
+/// Implements the Shunting-yard algorithm to convert infix to postfix (RPN).
 #[derive(Debug)]
 struct ShuntingYard {
-    input: VecDeque<Atom>,
-    output: VecDeque<Atom>,
-    operator_stack: Vec<Atom>,
+    /// The queue of `RegexToken`s to be processed.
+    input: VecDeque<RegexToken>,
+    /// The queue to store the resulting RPN expression.
+    output: VecDeque<RegexToken>,
+    /// The stack used to temporarily hold operators.
+    operator_stack: Vec<RegexToken>,
 }
 
 impl ShuntingYard {
+    /// Initializes a new `ShuntingYard` instance from a regular expression string.
     fn new(input: &str) -> ShuntingYard {
         ShuntingYard {
             input: explicit_concat(input).into(),
@@ -104,6 +130,7 @@ impl ShuntingYard {
         }
     }
 
+    /// Processes the next token from the input queue.
     fn consume_next(&mut self) {
         let current = self.input.pop_front().unwrap();
 
@@ -114,24 +141,26 @@ impl ShuntingYard {
         }
     }
 
-    fn process_operator(&mut self, current: Atom) {
+    /// Handles the logic for processing an operator, based on its precedence
+    /// and the state of the operator stack.
+    fn process_operator(&mut self, current: RegexToken) {
         match &current {
-            Atom::OpenParen => self.operator_stack.push(current),
-            Atom::CloseParen => {
+            RegexToken::OpenParen => self.operator_stack.push(current),
+            RegexToken::CloseParen => {
                 while let Some(a) = self.operator_stack.pop() {
-                    if matches!(a, Atom::OpenParen) {
+                    if matches!(a, RegexToken::OpenParen) {
                         break;
                     } else {
                         self.output.push_back(a);
                     }
                 }
             }
-            Atom::Character(_) => {
-                unreachable!("There should not be Character's in the opreator stack")
+            RegexToken::Character(_) => {
+                unreachable!("There should not be Character's in the operator stack")
             }
             current => {
                 while let Some(a) = self.operator_stack.pop() {
-                    if matches!(a, Atom::OpenParen) {
+                    if matches!(a, RegexToken::OpenParen) {
                         self.operator_stack.push(a);
                         self.operator_stack.push(*current);
                         break;
@@ -150,9 +179,9 @@ impl ShuntingYard {
         }
     }
 
+    /// Converts the input regular expression into RPN.
     fn to_rpn(&mut self) {
         while !self.input.is_empty() {
-            dbg!(&self);
             self.consume_next();
         }
         while !self.operator_stack.is_empty() {
@@ -161,12 +190,14 @@ impl ShuntingYard {
     }
 }
 
-pub fn regex_to_atoms(regex: &str) -> VecDeque<Atom> {
+/// Public function to convert a regular expression string to a deque of `RegexToken`s in RPN.
+pub fn regex_to_atoms(regex: &str) -> VecDeque<RegexToken> {
     let mut st = ShuntingYard::new(regex);
     st.to_rpn();
     st.output
 }
 
+/// Unit tests for the Shunting-yard algorithm implementation.
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -174,14 +205,22 @@ mod tests {
     #[test]
     fn test_or() {
         let input = "a|b";
-        let expected = vec![Atom::Character('a'), Atom::Or, Atom::Character('b')];
+        let expected = vec![
+            RegexToken::Character('a'),
+            RegexToken::Union,
+            RegexToken::Character('b'),
+        ];
         let result = explicit_concat(input);
         assert_eq!(result, expected);
     }
     #[test]
     fn test_basic_concat() {
         let input = "ab";
-        let expected = vec![Atom::Character('a'), Atom::Concat, Atom::Character('b')];
+        let expected = vec![
+            RegexToken::Character('a'),
+            RegexToken::Concat,
+            RegexToken::Character('b'),
+        ];
         let result = explicit_concat(input);
         assert_eq!(result, expected);
     }
@@ -190,12 +229,12 @@ mod tests {
     fn test_basic_concat_after_unary() {
         let input = "ab*c";
         let expected = vec![
-            Atom::Character('a'),
-            Atom::Concat,
-            Atom::Character('b'),
-            Atom::Kleene,
-            Atom::Concat,
-            Atom::Character('c'),
+            RegexToken::Character('a'),
+            RegexToken::Concat,
+            RegexToken::Character('b'),
+            RegexToken::Kleene,
+            RegexToken::Concat,
+            RegexToken::Character('c'),
         ];
 
         let result = explicit_concat(input);
@@ -206,13 +245,13 @@ mod tests {
     fn test_parens() {
         let input = "(a)(b)";
         let expected = vec![
-            Atom::OpenParen,
-            Atom::Character('a'),
-            Atom::CloseParen,
-            Atom::Concat,
-            Atom::OpenParen,
-            Atom::Character('b'),
-            Atom::CloseParen,
+            RegexToken::OpenParen,
+            RegexToken::Character('a'),
+            RegexToken::CloseParen,
+            RegexToken::Concat,
+            RegexToken::OpenParen,
+            RegexToken::Character('b'),
+            RegexToken::CloseParen,
         ];
         let result = explicit_concat(input);
         assert_eq!(result, expected);
@@ -222,12 +261,12 @@ mod tests {
     fn test_parens_after_unary() {
         let input = "a*(b)";
         let expected = vec![
-            Atom::Character('a'),
-            Atom::Kleene,
-            Atom::Concat,
-            Atom::OpenParen,
-            Atom::Character('b'),
-            Atom::CloseParen,
+            RegexToken::Character('a'),
+            RegexToken::Kleene,
+            RegexToken::Concat,
+            RegexToken::OpenParen,
+            RegexToken::Character('b'),
+            RegexToken::CloseParen,
         ];
         let result = explicit_concat(input);
         assert_eq!(result, expected);
@@ -237,10 +276,10 @@ mod tests {
     fn test_char_after_kleen() {
         let input = "a*b";
         let expected = vec![
-            Atom::Character('a'),
-            Atom::Kleene,
-            Atom::Concat,
-            Atom::Character('b'),
+            RegexToken::Character('a'),
+            RegexToken::Kleene,
+            RegexToken::Concat,
+            RegexToken::Character('b'),
         ];
         let result = explicit_concat(input);
         assert_eq!(result, expected);
@@ -250,10 +289,10 @@ mod tests {
     fn test_sy1() {
         let input = "a*|b";
         let expected = vec![
-            Atom::Character('a'),
-            Atom::Kleene,
-            Atom::Character('b'),
-            Atom::Or,
+            RegexToken::Character('a'),
+            RegexToken::Kleene,
+            RegexToken::Character('b'),
+            RegexToken::Union,
         ];
         let mut st = ShuntingYard::new(input);
         st.to_rpn();
@@ -265,12 +304,12 @@ mod tests {
     fn test_sy2() {
         let input = "a*c|b";
         let expected = vec![
-            Atom::Character('a'),
-            Atom::Kleene,
-            Atom::Character('c'),
-            Atom::Concat,
-            Atom::Character('b'),
-            Atom::Or,
+            RegexToken::Character('a'),
+            RegexToken::Kleene,
+            RegexToken::Character('c'),
+            RegexToken::Concat,
+            RegexToken::Character('b'),
+            RegexToken::Union,
         ];
         let mut st = ShuntingYard::new(input);
         st.to_rpn();
@@ -281,12 +320,12 @@ mod tests {
     fn test_sy3() {
         let input = "a*(c|b)";
         let expected = vec![
-            Atom::Character('a'),
-            Atom::Kleene,
-            Atom::Character('c'),
-            Atom::Character('b'),
-            Atom::Or,
-            Atom::Concat,
+            RegexToken::Character('a'),
+            RegexToken::Kleene,
+            RegexToken::Character('c'),
+            RegexToken::Character('b'),
+            RegexToken::Union,
+            RegexToken::Concat,
         ];
         let mut st = ShuntingYard::new(input);
         st.to_rpn();
@@ -297,12 +336,12 @@ mod tests {
     fn test_sy4() {
         let input = "(a*)(c|b)";
         let expected = vec![
-            Atom::Character('a'),
-            Atom::Kleene,
-            Atom::Character('c'),
-            Atom::Character('b'),
-            Atom::Or,
-            Atom::Concat,
+            RegexToken::Character('a'),
+            RegexToken::Kleene,
+            RegexToken::Character('c'),
+            RegexToken::Character('b'),
+            RegexToken::Union,
+            RegexToken::Concat,
         ];
         let mut st = ShuntingYard::new(input);
         st.to_rpn();
@@ -314,12 +353,12 @@ mod tests {
     fn test_sy5() {
         let input = "ab*c";
         let expected = vec![
-            Atom::Character('a'),
-            Atom::Character('b'),
-            Atom::Kleene,
-            Atom::Concat,
-            Atom::Character('c'),
-            Atom::Concat,
+            RegexToken::Character('a'),
+            RegexToken::Character('b'),
+            RegexToken::Kleene,
+            RegexToken::Concat,
+            RegexToken::Character('c'),
+            RegexToken::Concat,
         ];
         let mut st = ShuntingYard::new(input);
         st.to_rpn();
@@ -330,13 +369,13 @@ mod tests {
     fn test_sy6() {
         let input = "a(b|c)d";
         let expected = vec![
-            Atom::Character('a'),
-            Atom::Character('b'),
-            Atom::Character('c'),
-            Atom::Or,
-            Atom::Concat,
-            Atom::Character('d'),
-            Atom::Concat,
+            RegexToken::Character('a'),
+            RegexToken::Character('b'),
+            RegexToken::Character('c'),
+            RegexToken::Union,
+            RegexToken::Concat,
+            RegexToken::Character('d'),
+            RegexToken::Concat,
         ];
         let mut st = ShuntingYard::new(input);
         st.to_rpn();

@@ -1,32 +1,41 @@
 use std::collections::VecDeque;
 
 mod shunting_yard;
-use shunting_yard::{Atom, regex_to_atoms};
+use shunting_yard::{RegexToken, regex_to_atoms};
 
+/// Represents a transition in a Non-deterministic Finite Automaton (NFA).
+///
+/// An `Arrow` can be either an epsilon transition (`Epsilon`), which requires no input,
+/// or a labeled transition (`Labeled`), which requires a specific character to move to the next state.
 #[derive(Clone, Copy, Debug)]
 enum Arrow {
-    Empty(usize),
+    Epsilon(usize),
     Labeled((char, usize)),
 }
 
 impl Arrow {
+    /// Shifts the target state of the arrow by a given amount.
+    /// This is used when combining automata to adjust state indices.
     fn move_target(&self, shift: usize) -> Arrow {
         match self {
-            Arrow::Empty(t) => Arrow::Empty(t + shift),
+            Arrow::Epsilon(t) => Arrow::Epsilon(t + shift),
             Arrow::Labeled((l, t)) => Arrow::Labeled((*l, t + shift)),
         }
     }
 
-    fn empty(&self) -> Option<usize> {
+    /// Returns the target state if the arrow is an empty transition.
+    fn epsilon(&self) -> Option<usize> {
         match self {
-            Arrow::Empty(t) => Some(*t),
+            Arrow::Epsilon(t) => Some(*t),
             Arrow::Labeled(_) => None,
         }
     }
 
+    /// Returns the target state if the arrow is a labeled transition and the
+    /// given character matches the label.
     fn accept(&self, char: &char) -> Option<usize> {
         match self {
-            Arrow::Empty(_) => None,
+            Arrow::Epsilon(_) => None,
             Arrow::Labeled((l, t)) => {
                 if l == char {
                     Some(*t)
@@ -38,22 +47,30 @@ impl Arrow {
     }
 }
 
+/// Represents a Non-deterministic Finite Automaton (NFA).
+///
+/// The automaton is defined by a table of transitions, the starting state, and the final state.
 #[derive(Debug, Clone)]
 struct Automaton {
-    trans: Vec<Vec<Arrow>>,
+    /// Table of transitions, each row represents a state.
+    table: Vec<Vec<Arrow>>,
     starting: usize,
     final_state: usize,
 }
 
-fn join(left: &Automaton, right: &Automaton) -> Automaton {
-    let new_trans = [
-        left.trans.clone(),
+/// Utility function to append the tables of two NFAs.
+///
+/// The states of the `right` automaton are shifted to avoid conflicts with the
+/// `left` automaton's states.
+fn append_nfas(left: &Automaton, right: &Automaton) -> Automaton {
+    let new_table = [
+        left.table.clone(),
         right
-            .trans
+            .table
             .iter()
             .map(|row| {
                 row.iter()
-                    .map(|arrow| arrow.move_target(left.trans.len()))
+                    .map(|arrow| arrow.move_target(left.table.len()))
                     .collect()
             })
             .collect(),
@@ -61,136 +78,182 @@ fn join(left: &Automaton, right: &Automaton) -> Automaton {
     .concat();
 
     Automaton {
-        trans: new_trans,
+        table: new_table,
         starting: left.starting,
-        final_state: right.final_state + left.trans.len(),
+        final_state: right.final_state + left.table.len(),
     }
 }
 
+/// Applies the Kleene star operator (`*`) to an automaton.
+///
+/// Creates a new NFA that accepts zero or more repetitions of the language
+/// accepted by the original automaton.
 fn kleene(automaton: &Automaton) -> Automaton {
     let mut automaton = automaton.clone();
-    let old_len = automaton.trans.len();
+    let old_len = automaton.table.len();
 
-    automaton.trans[automaton.final_state].push(Arrow::Empty(old_len));
+    // Add epsilon transition from the old final state to the new final state
+    automaton.table[automaton.final_state].push(Arrow::Epsilon(old_len));
 
-    automaton.trans.push(vec![Arrow::Empty(automaton.starting)]);
+    // Add epsilon transition from the new start state to the old start state
+    automaton.table.push(vec![Arrow::Epsilon(automaton.starting)]);
 
-    automaton.starting = automaton.trans.len() - 1;
-    automaton.final_state = automaton.trans.len() - 1;
+    // Update start and final states to the new ones
+    automaton.starting = old_len;
+    automaton.final_state = old_len;
     automaton
 }
 
+/// Applies the positive closure operator (`+`) to an automaton.
+///
+/// Creates a new NFA that accepts one or more repetitions of the language
+/// accepted by the original automaton.
 fn positive_clousure(automaton: &Automaton) -> Automaton {
     let mut automaton = automaton.clone();
 
-    automaton.trans[automaton.final_state].push(Arrow::Empty(automaton.starting));
+    // Add an epsilon transition from the final state back to the starting state
+    automaton.table[automaton.final_state].push(Arrow::Epsilon(automaton.starting));
 
     automaton
 }
 
-fn zero_or_one(automaton: &Automaton) -> Automaton {
+/// Applies the optionality operator (`?`) to an automaton.
+///
+/// Creates a new NFA that accepts zero or one occurrence of the language
+/// accepted by the original automaton.
+fn optional(automaton: &Automaton) -> Automaton {
     let mut automaton = automaton.clone();
 
-    automaton.trans[automaton.starting].push(Arrow::Empty(automaton.final_state));
+    // Add an epsilon transition from the starting state to the final state
+    automaton.table[automaton.starting].push(Arrow::Epsilon(automaton.final_state));
 
     automaton
 }
 
-fn or(left: &Automaton, right: &Automaton) -> Automaton {
-    let mut joined = join(left, right);
+/// Applies the union operator (`|`) to two automata.
+///
+/// Creates a new NFA that accepts the union of the languages accepted by the
+/// two original automata.
+fn union(left: &Automaton, right: &Automaton) -> Automaton {
+    let mut joined = append_nfas(left, right);
 
-    let left_len = left.trans.len();
-    let joined_len = joined.trans.len();
+    let left_len = left.table.len();
+    let joined_len = joined.table.len();
     joined.starting = joined_len;
     joined.final_state = joined_len + 1;
 
-    joined.trans[joined_len - 1].push(Arrow::Empty(joined.final_state));
-    joined.trans[left.final_state].push(Arrow::Empty(joined.final_state));
+    // Add epsilon transitions from old final states to the new final state
+    joined.table[joined_len - 1].push(Arrow::Epsilon(joined.final_state));
+    joined.table[left.final_state].push(Arrow::Epsilon(joined.final_state));
 
-    joined.trans.push(vec![
-        Arrow::Empty(left.starting),
-        Arrow::Empty(right.starting + left_len),
+    // Add epsilon transitions from the new start state to the old start states
+    joined.table.push(vec![
+        Arrow::Epsilon(left.starting),
+        Arrow::Epsilon(right.starting + left_len),
     ]);
-    joined.trans.push(vec![]);
+
+    // Add final state
+    joined.table.push(vec![]);
 
     joined
 }
 
+/// Applies the concatenation operator to two automata.
+///
+/// Creates a new NFA that accepts the language formed by concatenating the
+/// languages accepted by the two original automata.
 fn concat(left: &Automaton, right: &Automaton) -> Automaton {
-    let mut joined = join(left, right);
+    let mut joined = append_nfas(left, right);
 
-    joined.trans[left.final_state].push(Arrow::Empty(right.starting + left.trans.len()));
+    // Add an epsilon transition from the first automaton's final state to the
+    // second automaton's start state.
+    joined.table[left.final_state].push(Arrow::Epsilon(right.starting + left.table.len()));
 
     joined
 }
 
 impl Automaton {
+    /// Creates a new NFA that accepts a single character.
     fn from_char(c: char) -> Automaton {
         Automaton {
-            trans: vec![vec![Arrow::Labeled((c, 1))], vec![]],
+            table: vec![vec![Arrow::Labeled((c, 1))], vec![]],
             starting: 0,
             final_state: 1,
         }
     }
 
+    /// Creates an NFA from a regular expression string by first converting the
+    /// regex to a sequence of `Atom`s using the Shunting-yard algorithm.
     pub fn from_regex(regex: &str) -> Automaton {
         Automaton::from_atoms(regex_to_atoms(regex))
     }
 
-    fn from_atoms(atoms: VecDeque<Atom>) -> Automaton {
+    /// Constructs an NFA from a sequence of `Atom`s in postfix notation.
+    /// This is the core of Thompson's construction.
+    // TODO: Improve error handling, remove `unwraps` and `unreachables`
+    fn from_atoms(atoms: VecDeque<RegexToken>) -> Automaton {
         let mut automatons: Vec<Automaton> = vec![];
 
         for atom in atoms {
             match atom {
-                Atom::Kleene => {
+                RegexToken::Kleene => {
                     let last = automatons.pop().unwrap();
                     automatons.push(kleene(&last));
                 }
-                Atom::Concat => {
+                RegexToken::Concat => {
                     let first = automatons.pop().unwrap();
                     let second = automatons.pop().unwrap();
                     automatons.push(concat(&second, &first));
                 }
-                Atom::Or => {
+                RegexToken::Union => {
                     let first = automatons.pop().unwrap();
                     let second = automatons.pop().unwrap();
-                    automatons.push(or(&second, &first));
+                    automatons.push(union(&second, &first));
                 }
-                Atom::Character(c) => automatons.push(Automaton::from_char(c)),
-                Atom::Plus => {
+                RegexToken::Character(c) => automatons.push(Automaton::from_char(c)),
+                RegexToken::PositiveClosure => {
                     let last = automatons.pop().unwrap();
                     automatons.push(positive_clousure(&last));
                 }
-                Atom::Question => {
+                RegexToken::Optional => {
                     let last = automatons.pop().unwrap();
-                    automatons.push(zero_or_one(&last));
+                    automatons.push(optional(&last));
                 }
-                Atom::OpenParen => unreachable!(),
-                Atom::CloseParen => unreachable!(),
+                // This should not ocurr, since the Shunting Yard algorithm
+                // removes parens.
+                // TODO: Improve error handling
+                RegexToken::OpenParen => unreachable!(),
+                RegexToken::CloseParen => unreachable!(),
             }
         }
 
         automatons.pop().unwrap()
     }
 
+    /// Simulates one step of the NFA, moving from the current set of states
+    /// based on a single character input. Epsilon transitions are not followed.
     fn simulate_non_empty_step(&self, states: Vec<usize>, char: char) -> Vec<usize> {
         states
             .iter()
             .flat_map(|state| {
-                self.trans[*state]
+                self.table[*state]
                     .iter()
                     .filter_map(|arrow| arrow.accept(&char))
             })
             .collect()
     }
 
+    /// Computes the epsilon closure of a set of states.
+    ///
+    /// This finds all states reachable from the initial set of states by following
+    /// only epsilon transitions.
     // TODO: optimize
     fn empty_closure(&self, mut states: Vec<usize>) -> Vec<usize> {
         loop {
             let mut new_seen = false;
 
             for state in states.clone() {
-                for new_state in self.trans[state].iter().filter_map(|arrow| arrow.empty()) {
+                for new_state in self.table[state].iter().filter_map(|arrow| arrow.epsilon()) {
                     if !states.contains(&new_state) {
                         new_seen = true;
                         states.push(new_state);
@@ -198,12 +261,17 @@ impl Automaton {
                 }
             }
 
+            // loop ends when no new states where added in the last step
             if !new_seen {
                 return states;
             }
         }
     }
 
+    /// Determines if the automaton accepts a given input string.
+    ///
+    /// The simulation proceeds by iteratively calculating the epsilon closure
+    /// and then performing a character-based step for each character in the input.
     fn accept(&self, input: &str) -> bool {
         let mut states = vec![self.starting];
 
@@ -226,7 +294,7 @@ mod tests {
     fn test_char_a() {
         let arrow = Arrow::Labeled(('a', 1));
         let aut = Automaton {
-            trans: vec![vec![arrow], vec![]],
+            table: vec![vec![arrow], vec![]],
             starting: 0,
             final_state: 1,
         };
@@ -241,7 +309,7 @@ mod tests {
         let a_arrow = Arrow::Labeled(('a', 1));
         let b_arrow = Arrow::Labeled(('b', 2));
         let aut = Automaton {
-            trans: vec![vec![a_arrow], vec![b_arrow], vec![]],
+            table: vec![vec![a_arrow], vec![b_arrow], vec![]],
             starting: 0,
             final_state: 2,
         };
@@ -256,12 +324,12 @@ mod tests {
         let a_arrow = Arrow::Labeled(('a', 1));
         let b_arrow = Arrow::Labeled(('b', 1));
         let aut1 = Automaton {
-            trans: vec![vec![a_arrow], vec![]],
+            table: vec![vec![a_arrow], vec![]],
             starting: 0,
             final_state: 1,
         };
         let aut2 = Automaton {
-            trans: vec![vec![b_arrow], vec![]],
+            table: vec![vec![b_arrow], vec![]],
             starting: 0,
             final_state: 1,
         };
@@ -278,17 +346,17 @@ mod tests {
         let a_arrow = Arrow::Labeled(('a', 1));
         let b_arrow = Arrow::Labeled(('b', 1));
         let aut1 = Automaton {
-            trans: vec![vec![a_arrow], vec![]],
+            table: vec![vec![a_arrow], vec![]],
             starting: 0,
             final_state: 1,
         };
         let aut2 = Automaton {
-            trans: vec![vec![b_arrow], vec![]],
+            table: vec![vec![b_arrow], vec![]],
             starting: 0,
             final_state: 1,
         };
 
-        let aut = or(&aut1, &aut2);
+        let aut = union(&aut1, &aut2);
 
         dbg!(&aut);
 
@@ -317,7 +385,7 @@ mod tests {
 
         let ab = concat(&a, &b);
 
-        let ab_or_c = or(&ab, &c);
+        let ab_or_c = union(&ab, &c);
 
         assert!(ab.accept("ab"));
         assert!(ab_or_c.accept("ab"));
@@ -329,7 +397,7 @@ mod tests {
         let a = Automaton::from_char('a');
 
         let mut aut = Automaton {
-            trans: vec![],
+            table: vec![],
             starting: 0,
             final_state: 0,
         };
@@ -372,7 +440,7 @@ mod tests {
     fn test_zero_or_one() {
         let a = Automaton::from_char('a');
 
-        let aut = zero_or_one(&a);
+        let aut = optional(&a);
 
         assert!(aut.accept(""));
         assert!(aut.accept("a"));
