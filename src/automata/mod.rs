@@ -1,9 +1,8 @@
-enum Atom {
-    Kleene,
-    Concat,
-    Or,
-    Character(u8),
-}
+
+mod shunting_yard;
+
+
+
 
 #[derive(Clone, Copy, Debug)]
 enum Arrow {
@@ -168,7 +167,6 @@ impl Automaton {
 
 #[cfg(test)]
 mod tests {
-    use std::vec;
 
     use super::*;
 
