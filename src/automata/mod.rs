@@ -1,13 +1,14 @@
+use std::collections::VecDeque;
 
 mod shunting_yard;
-
+use shunting_yard::{Atom, regex_to_atoms};
 
 
 
 #[derive(Clone, Copy, Debug)]
 enum Arrow {
     Empty(usize),
-    Labeled((u8, usize)),
+    Labeled((char, usize)),
 }
 
 impl Arrow {
@@ -25,7 +26,7 @@ impl Arrow {
         }
     }
 
-    fn accept(&self, char: &u8) -> Option<usize> {
+    fn accept(&self, char: &char) -> Option<usize> {
         match self {
             Arrow::Empty(_) => None,
             Arrow::Labeled((l, t)) => {
@@ -110,15 +111,52 @@ fn concat(left: &Automaton, right: &Automaton) -> Automaton {
 }
 
 impl Automaton {
-    fn from_char(char: u8) -> Automaton {
+    fn from_char(c: char) -> Automaton {
         Automaton {
-            trans: vec![vec![Arrow::Labeled((char, 1))], vec![]],
+            trans: vec![vec![Arrow::Labeled((c, 1))], vec![]],
             starting: 0,
             final_state: 1,
         }
     }
 
-    fn simulate_non_empty_step(&self, states: Vec<usize>, char: u8) -> Vec<usize> {
+    pub fn from_regex(regex: &str) -> Automaton {
+        Automaton::from_atoms(regex_to_atoms(regex))
+    }
+
+    fn from_atoms(atoms: VecDeque<Atom>) -> Automaton {
+
+        let mut automatons: Vec<Automaton> = vec![];
+
+        for atom in atoms {
+            match atom {
+                Atom::Kleene => {
+                    let last = automatons.pop().unwrap();
+                    automatons.push(kleene(&last));
+                },
+                Atom::Concat => {
+                    let first = automatons.pop().unwrap();
+                    let second = automatons.pop().unwrap();
+                    automatons.push(concat(&second, &first));
+                },
+                Atom::Or => {
+                    let first = automatons.pop().unwrap();
+                    let second = automatons.pop().unwrap();
+                    automatons.push(or(&second, &first));
+                },
+                Atom::Character(c) => automatons.push(Automaton::from_char(c)),
+                Atom::OpenParen => unreachable!(),
+                Atom::CloseParen => unreachable!(),
+                Atom::Plus => unimplemented!(),
+                Atom::Question => unimplemented!(),
+            }
+
+        }
+
+
+        automatons.pop().unwrap()
+    }
+
+    fn simulate_non_empty_step(&self, states: Vec<usize>, char: char) -> Vec<usize> {
         states
             .iter()
             .flat_map(|state| {
@@ -152,11 +190,9 @@ impl Automaton {
     fn accept(&self, input: &str) -> bool {
         let mut states = vec![self.starting];
 
-        for char in input.as_bytes() {
+        for char in input.chars() {
             states = self.empty_closure(states);
-            dbg!(&states);
-            states = self.simulate_non_empty_step(states, *char);
-            dbg!(&states);
+            states = self.simulate_non_empty_step(states, char);
         }
         states = self.empty_closure(states);
 
@@ -172,7 +208,7 @@ mod tests {
 
     #[test]
     fn test_char_a() {
-        let arrow = Arrow::Labeled((b'a', 1));
+        let arrow = Arrow::Labeled(('a', 1));
         let aut = Automaton {
             trans: vec![vec![arrow], vec![]],
             starting: 0,
@@ -186,8 +222,8 @@ mod tests {
 
     #[test]
     fn test_ab() {
-        let a_arrow = Arrow::Labeled((b'a', 1));
-        let b_arrow = Arrow::Labeled((b'b', 2));
+        let a_arrow = Arrow::Labeled(('a', 1));
+        let b_arrow = Arrow::Labeled(('b', 2));
         let aut = Automaton {
             trans: vec![vec![a_arrow], vec![b_arrow], vec![]],
             starting: 0,
@@ -201,8 +237,8 @@ mod tests {
 
     #[test]
     fn test_concat() {
-        let a_arrow = Arrow::Labeled((b'a', 1));
-        let b_arrow = Arrow::Labeled((b'b', 1));
+        let a_arrow = Arrow::Labeled(('a', 1));
+        let b_arrow = Arrow::Labeled(('b', 1));
         let aut1 = Automaton {
             trans: vec![vec![a_arrow], vec![]],
             starting: 0,
@@ -223,8 +259,8 @@ mod tests {
 
     #[test]
     fn test_or() {
-        let a_arrow = Arrow::Labeled((b'a', 1));
-        let b_arrow = Arrow::Labeled((b'b', 1));
+        let a_arrow = Arrow::Labeled(('a', 1));
+        let b_arrow = Arrow::Labeled(('b', 1));
         let aut1 = Automaton {
             trans: vec![vec![a_arrow], vec![]],
             starting: 0,
@@ -248,8 +284,8 @@ mod tests {
 
     #[test]
     fn single_char() {
-        let a = Automaton::from_char(b'a');
-        let b = Automaton::from_char(b'b');
+        let a = Automaton::from_char('a');
+        let b = Automaton::from_char('b');
 
         assert!(a.accept("a"));
         assert!(!a.accept("b"));
@@ -259,9 +295,9 @@ mod tests {
 
     #[test]
     fn concat_and_or() {
-        let a = Automaton::from_char(b'a');
-        let b = Automaton::from_char(b'b');
-        let c = Automaton::from_char(b'c');
+        let a = Automaton::from_char('a');
+        let b = Automaton::from_char('b');
+        let c = Automaton::from_char('c');
 
         let ab = concat(&a, &b);
 
@@ -274,7 +310,7 @@ mod tests {
 
     #[test]
     fn multi_concat() {
-        let a = Automaton::from_char(b'a');
+        let a = Automaton::from_char('a');
 
         let mut aut = Automaton {
             trans: vec![],
@@ -292,7 +328,7 @@ mod tests {
 
     #[test]
     fn test_kleene() {
-        let a = Automaton::from_char(b'a');
+        let a = Automaton::from_char('a');
 
         let a_kleene = kleene(&a);
 
@@ -303,4 +339,27 @@ mod tests {
         assert!(!a_kleene.accept("ab"));
     }
 
+
+    #[test]
+    fn test_automaton_from_atoms() {
+
+        let aut = Automaton::from_atoms(regex_to_atoms("a*|b"));
+
+        assert!(aut.accept(""));
+        assert!(aut.accept("b"));
+        assert!(aut.accept("a"));
+        assert!(aut.accept("aa"));
+    }
+
+    #[test]
+    fn test_automaton_from_regex() {
+
+        let aut = Automaton::from_regex("((a*|b)c)*");
+
+        assert!(aut.accept(""));
+        assert!(aut.accept("bc"));
+        assert!(aut.accept("aaaac"));
+        assert!(aut.accept("aaaacbc"));
+        assert!(!aut.accept("aa"));
+    }
 }

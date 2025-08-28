@@ -14,10 +14,7 @@ pub enum Atom {
 
 impl Atom {
     fn is_operator(&self) -> bool {
-        match self {
-            Atom::Character(_) => false,
-            _ => true,
-        }
+        !matches!(self, Atom::Character(_))
     }
 
     fn precedence(&self) -> u8 {
@@ -104,7 +101,7 @@ impl ShuntingYard {
         }
     }
 
-    fn consume_next(&mut self) -> () {
+    fn consume_next(&mut self) {
         let current = self.input.pop_front().unwrap();
 
         if current.is_operator() {
@@ -157,6 +154,12 @@ impl ShuntingYard {
             self.output.push_back(self.operator_stack.pop().unwrap());
         }
     }
+}
+
+pub fn regex_to_atoms(regex: &str) -> VecDeque<Atom> {
+        let mut st = ShuntingYard::new(regex);
+        st.to_rpn();
+        st.output
 }
 
 #[cfg(test)]
