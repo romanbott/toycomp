@@ -16,6 +16,13 @@ pub enum Arrow {
 }
 
 impl Arrow {
+    fn get_label(&self) -> Option<char> {
+        match self {
+            Arrow::Epsilon(_) => None,
+            Arrow::Labeled((c, _)) => Some(*c),
+        }
+    }
+
     /// Shifts the target state of the arrow by a given amount.
     /// This is used when combining automata to adjust state indices.
     fn move_target(&self, shift: usize) -> Arrow {
@@ -177,6 +184,14 @@ fn concat(left: &NDFA, right: &NDFA) -> NDFA {
 }
 
 impl NDFA {
+    pub fn get_alphabet(&self) -> BTreeSet<char> {
+        self.table
+            .iter()
+            .map(|row| row.iter().filter_map(|a| a.get_label()))
+            .flatten()
+            .collect()
+    }
+
     /// Creates a new NFA that accepts a single character.
     fn from_char(c: char) -> NDFA {
         NDFA {
@@ -236,7 +251,7 @@ impl NDFA {
 
     /// Simulates one step of the NFA, moving from the current set of states
     /// based on a single character input. Epsilon transitions are not followed.
-    fn simulate_non_empty_step(&self, states: BTreeSet<usize>, char: char) -> BTreeSet<usize> {
+    pub fn simulate_non_empty_step(&self, states: &BTreeSet<usize>, char: char) -> BTreeSet<usize> {
         states
             .iter()
             .flat_map(|state| {
@@ -247,11 +262,15 @@ impl NDFA {
             .collect()
     }
 
+    pub fn move_c(&self, states: &BTreeSet<usize>, char: char) -> BTreeSet<usize> {
+        self.epsilon_closure(&self.simulate_non_empty_step(states, char))
+    }
+
     /// Computes the epsilon closure of a set of states.
     ///
     /// This finds all states reachable from the initial set of states by following
     /// only epsilon transitions.
-    fn epsilon_closure(&self, states: BTreeSet<usize>) -> BTreeSet<usize> {
+    pub fn epsilon_closure(&self, states: &BTreeSet<usize>) -> BTreeSet<usize> {
         let mut unchecked: BTreeSet<usize> = BTreeSet::from_iter(states.clone().into_iter());
 
         let mut checked: BTreeSet<usize> = BTreeSet::new();
@@ -277,10 +296,10 @@ impl NDFA {
         let mut states = BTreeSet::from([self.starting]);
 
         for char in input.chars() {
-            states = self.epsilon_closure(states);
-            states = self.simulate_non_empty_step(states, char);
+            states = self.epsilon_closure(&states);
+            states = self.simulate_non_empty_step(&states, char);
         }
-        states = self.epsilon_closure(states);
+        states = self.epsilon_closure(&states);
 
         states.contains(&self.final_state)
     }
@@ -299,9 +318,9 @@ mod tests {
             starting: 0,
             final_state: 1,
         };
-        let ec = aut.epsilon_closure(BTreeSet::from([0]));
+        let ec = aut.epsilon_closure(&BTreeSet::from([0]));
 
-        assert_eq!(BTreeSet::from([0,1]), ec);
+        assert_eq!(BTreeSet::from([0, 1]), ec);
     }
 
     #[test]
