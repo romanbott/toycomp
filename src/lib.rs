@@ -1,3 +1,3 @@
 mod automata;
 
-pub use automata::Automaton;
+pub use automata::NDFA;

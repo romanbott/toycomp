@@ -1,5 +1,5 @@
 use std::{env, process::exit};
-use toycomp::Automaton;
+use toycomp::NDFA;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -13,7 +13,7 @@ fn main() {
     let string = &args[2];
 
 
-    let automaton = Automaton::from_regex(regex);
+    let automaton = NDFA::from_regex(regex);
 
     if automaton.accept(string) {
         println!("matches");
