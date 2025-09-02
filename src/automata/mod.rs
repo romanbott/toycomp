@@ -3,4 +3,5 @@ mod ndfa;
 mod dfa;
 
 pub use ndfa::NDFA;
+pub use dfa::DFA;
 
