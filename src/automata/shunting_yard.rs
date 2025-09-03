@@ -184,8 +184,9 @@ impl ShuntingYard {
         while !self.input.is_empty() {
             self.consume_next();
         }
-        while !self.operator_stack.is_empty() {
-            self.output.push_back(self.operator_stack.pop().unwrap());
+        while let Some(operator) = self.operator_stack.pop() {
+            self.output.push_back(operator);
+
         }
     }
 }

@@ -22,11 +22,20 @@ impl LabeledArrow {
     }
 }
 
+impl From<(char, usize)> for LabeledArrow {
+    fn from(value: (char, usize)) -> Self {
+        LabeledArrow {
+            label: value.0,
+            target: value.1,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct DFA {
     /// Table of transitions, each row represents a state.
     table: Vec<Vec<LabeledArrow>>,
-    starting: usize,
+    initial_state: usize,
     final_states: BTreeSet<usize>,
 }
 
@@ -36,7 +45,7 @@ impl DFA {
     }
 
     pub fn accept(&self, input: &str) -> bool {
-        let mut state = self.starting;
+        let mut state = self.initial_state;
         for char in input.chars() {
             if let Some(next) = self.move_c(state, char) {
                 state = next;
@@ -63,8 +72,7 @@ ranksep = .75;
             .table
             .iter()
             .enumerate()
-            .map(|(source, trans)| trans.iter().map(move |a| a.to_graphviz(&source)))
-            .flatten()
+            .flat_map(|(source, trans)| trans.iter().map(move |a| a.to_graphviz(&source)))
             .collect();
 
         let final_states: Vec<String> = self
@@ -77,7 +85,7 @@ ranksep = .75;
             "{}\n{}\nstart->{}\n{}\n}}",
             preamble,
             final_states.join("\n"),
-            self.starting,
+            self.initial_state,
             arrows.join("\n")
         )
     }
@@ -85,64 +93,15 @@ ranksep = .75;
 
 impl From<NDFA> for DFA {
     fn from(ndfa: NDFA) -> Self {
-        let alphabet = ndfa.get_alphabet();
-        let mut unchecked: BTreeSet<BTreeSet<usize>> = BTreeSet::new();
-        let mut checked: BTreeSet<BTreeSet<usize>> = BTreeSet::new();
-
-        let initial_state = ndfa.epsilon_closure(&BTreeSet::from([ndfa.starting]));
-
-        unchecked.insert(initial_state.clone());
-
-        while !unchecked.is_empty() {
-            let state = unchecked.pop_first().unwrap();
-            checked.insert(state.clone());
-
-            for c in &alphabet {
-                let move_c = ndfa.move_c(&state, *c);
-
-                if !move_c.is_empty() & !checked.contains(&move_c) {
-                    unchecked.insert(move_c);
-                }
-            }
-        }
-
-        let checked: Vec<BTreeSet<usize>> = checked.into_iter().collect();
-
-        let table = checked
-            .iter()
-            .map(|s| {
-                alphabet
-                    .iter()
-                    .filter_map(|c| {
-                        let moved = ndfa.move_c(s, *c);
-                        if moved.is_empty() {
-                            None
-                        } else {
-                            Some(LabeledArrow {
-                                label: *c,
-                                target: checked.binary_search(&moved).unwrap(),
-                            })
-                        }
-                    })
-                    .collect()
-            })
-            .collect();
-
-        let final_states = checked
-            .iter()
-            .enumerate()
-            .filter_map(|(i, s)| {
-                if s.contains(&ndfa.final_state) {
-                    Some(i)
-                } else {
-                    None
-                }
-            })
+        let (table, initial_state, final_states) = ndfa.worklist();
+        let table = table
+            .into_iter()
+            .map(|row| row.into_iter().map(LabeledArrow::from).collect())
             .collect();
 
         DFA {
             table,
-            starting: checked.binary_search(&initial_state).unwrap(),
+            initial_state,
             final_states,
         }
     }
@@ -168,7 +127,7 @@ mod tests {
 
         let expected = DFA {
             table: vec![vec![]],
-            starting: 0,
+            initial_state: 0,
             final_states: BTreeSet::from([0]),
         };
 

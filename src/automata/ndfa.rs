@@ -1,7 +1,4 @@
-use std::{
-    collections::{BTreeSet, VecDeque},
-    usize,
-};
+use std::collections::{BTreeSet, VecDeque};
 
 use crate::automata::shunting_yard::{RegexToken, regex_to_atoms};
 
@@ -76,6 +73,212 @@ pub struct NDFA {
     pub final_state: usize,
 }
 
+impl NDFA {
+    pub fn worklist(&self) -> (Vec<Vec<(char, usize)>>, usize, BTreeSet<usize>) {
+        let alphabet = self.get_alphabet();
+        let mut unchecked: BTreeSet<BTreeSet<usize>> = BTreeSet::new();
+        let mut checked: BTreeSet<BTreeSet<usize>> = BTreeSet::new();
+
+        let initial_state = self.epsilon_closure(&BTreeSet::from([self.starting]));
+
+        unchecked.insert(initial_state.clone());
+
+        while !unchecked.is_empty() {
+            let state = unchecked.pop_first().unwrap();
+            checked.insert(state.clone());
+
+            for c in &alphabet {
+                let move_c = self.move_c(&state, *c);
+
+                if !move_c.is_empty() & !checked.contains(&move_c) {
+                    unchecked.insert(move_c);
+                }
+            }
+        }
+
+        let checked: Vec<BTreeSet<usize>> = checked.into_iter().collect();
+
+        let table = checked
+            .iter()
+            .map(|s| {
+                alphabet
+                    .iter()
+                    .filter_map(|c| {
+                        let moved = self.move_c(s, *c);
+                        if moved.is_empty() {
+                            None
+                        } else {
+                            Some((*c, checked.binary_search(&moved).unwrap()))
+                        }
+                    })
+                    .collect()
+            })
+            .collect();
+
+        let final_states = checked
+            .iter()
+            .enumerate()
+            .filter_map(|(i, s)| {
+                if s.contains(&self.final_state) {
+                    Some(i)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        (
+            table,
+            checked.binary_search(&initial_state).unwrap(),
+            final_states,
+        )
+    }
+
+    pub fn get_alphabet(&self) -> BTreeSet<char> {
+        self.table
+            .iter()
+            .flat_map(|row| row.iter().filter_map(|a| a.get_label()))
+            .collect()
+    }
+
+    /// Creates a new NFA that accepts a single character.
+    fn from_char(c: char) -> NDFA {
+        NDFA {
+            table: vec![vec![Arrow::Labeled((c, 1))], vec![]],
+            starting: 0,
+            final_state: 1,
+        }
+    }
+
+    /// Creates an NFA from a regular expression string by first converting the
+    /// regex to a sequence of `Atom`s using the Shunting-yard algorithm.
+    pub fn from_regex(regex: &str) -> NDFA {
+        NDFA::from_atoms(regex_to_atoms(regex))
+    }
+
+    /// Constructs an NFA from a sequence of `Atom`s in postfix notation.
+    /// This is the core of Thompson's construction.
+    // TODO: Improve error handling, remove `unwraps` and `unreachables`
+    fn from_atoms(atoms: VecDeque<RegexToken>) -> NDFA {
+        let mut automatons: Vec<NDFA> = vec![];
+
+        for atom in atoms {
+            match atom {
+                RegexToken::Kleene => {
+                    let last = automatons.pop().unwrap();
+                    automatons.push(kleene(&last));
+                }
+                RegexToken::Concat => {
+                    let first = automatons.pop().unwrap();
+                    let second = automatons.pop().unwrap();
+                    automatons.push(concat(&second, &first));
+                }
+                RegexToken::Union => {
+                    let first = automatons.pop().unwrap();
+                    let second = automatons.pop().unwrap();
+                    automatons.push(union(&second, &first));
+                }
+                RegexToken::Character(c) => automatons.push(NDFA::from_char(c)),
+                RegexToken::PositiveClosure => {
+                    let last = automatons.pop().unwrap();
+                    automatons.push(positive_clousure(&last));
+                }
+                RegexToken::Optional => {
+                    let last = automatons.pop().unwrap();
+                    automatons.push(optional(&last));
+                }
+                // This should not ocurr, since the Shunting Yard algorithm
+                // removes parens.
+                // TODO: Improve error handling
+                RegexToken::OpenParen => unreachable!(),
+                RegexToken::CloseParen => unreachable!(),
+            }
+        }
+
+        automatons.pop().unwrap()
+    }
+
+    /// Simulates one step of the NFA, moving from the current set of states
+    /// based on a single character input. Epsilon transitions are not followed.
+    pub fn simulate_non_empty_step(&self, states: &BTreeSet<usize>, char: char) -> BTreeSet<usize> {
+        states
+            .iter()
+            .flat_map(|state| {
+                self.table[*state]
+                    .iter()
+                    .filter_map(|arrow| arrow.accept(&char))
+            })
+            .collect()
+    }
+
+    pub fn move_c(&self, states: &BTreeSet<usize>, char: char) -> BTreeSet<usize> {
+        self.epsilon_closure(&self.simulate_non_empty_step(states, char))
+    }
+
+    /// Computes the epsilon closure of a set of states.
+    ///
+    /// This finds all states reachable from the initial set of states by following
+    /// only epsilon transitions.
+    pub fn epsilon_closure(&self, states: &BTreeSet<usize>) -> BTreeSet<usize> {
+        let mut unchecked: BTreeSet<usize> = BTreeSet::from_iter(states.clone());
+
+        let mut checked: BTreeSet<usize> = BTreeSet::new();
+
+        while !unchecked.is_empty() {
+            let state = unchecked.pop_first().unwrap();
+            checked.insert(state);
+            for new_state in self.table[state].iter().filter_map(|arrow| arrow.epsilon()) {
+                if !unchecked.contains(&new_state) & !checked.contains(&new_state) {
+                    unchecked.insert(new_state);
+                }
+            }
+        }
+
+        checked
+    }
+
+    /// Determines if the automaton accepts a given input string.
+    ///
+    /// The simulation proceeds by iteratively calculating the epsilon closure
+    /// and then performing a character-based step for each character in the input.
+    pub fn accept(&self, input: &str) -> bool {
+        let mut states = BTreeSet::from([self.starting]);
+
+        for char in input.chars() {
+            states = self.epsilon_closure(&states);
+            states = self.simulate_non_empty_step(&states, char);
+        }
+        states = self.epsilon_closure(&states);
+
+        states.contains(&self.final_state)
+    }
+
+    pub fn to_graphviz(&self) -> String {
+        let preamble = r#"digraph {
+rankdir = LR;
+ranksep = .75;
+    node [shape=circle style=filled]
+    start [shape=none, label="start", style=""]
+"#;
+
+        let arrows: Vec<String> = self
+            .table
+            .iter()
+            .enumerate()
+            .flat_map(|(source, trans)| trans.iter().map(move |a| a.to_graphviz(source)))
+            .collect();
+
+        let final_state = format!("{} [shape=doublecircle]", self.final_state);
+
+        format!(
+            "{}\n{}\nstart->{}\n{}\n}}",
+            preamble,
+            final_state,
+            self.starting,
+            arrows.join("\n")
+        )
+    }
+}
 /// Utility function to append the tables of two NFAs.
 ///
 /// The states of the `right` automaton are shifted to avoid conflicts with the
@@ -190,155 +393,6 @@ fn concat(left: &NDFA, right: &NDFA) -> NDFA {
     joined.table[left.final_state].push(Arrow::Epsilon(right.starting + left.table.len()));
 
     joined
-}
-
-impl NDFA {
-    pub fn get_alphabet(&self) -> BTreeSet<char> {
-        self.table
-            .iter()
-            .map(|row| row.iter().filter_map(|a| a.get_label()))
-            .flatten()
-            .collect()
-    }
-
-    /// Creates a new NFA that accepts a single character.
-    fn from_char(c: char) -> NDFA {
-        NDFA {
-            table: vec![vec![Arrow::Labeled((c, 1))], vec![]],
-            starting: 0,
-            final_state: 1,
-        }
-    }
-
-    /// Creates an NFA from a regular expression string by first converting the
-    /// regex to a sequence of `Atom`s using the Shunting-yard algorithm.
-    pub fn from_regex(regex: &str) -> NDFA {
-        NDFA::from_atoms(regex_to_atoms(regex))
-    }
-
-    /// Constructs an NFA from a sequence of `Atom`s in postfix notation.
-    /// This is the core of Thompson's construction.
-    // TODO: Improve error handling, remove `unwraps` and `unreachables`
-    fn from_atoms(atoms: VecDeque<RegexToken>) -> NDFA {
-        let mut automatons: Vec<NDFA> = vec![];
-
-        for atom in atoms {
-            match atom {
-                RegexToken::Kleene => {
-                    let last = automatons.pop().unwrap();
-                    automatons.push(kleene(&last));
-                }
-                RegexToken::Concat => {
-                    let first = automatons.pop().unwrap();
-                    let second = automatons.pop().unwrap();
-                    automatons.push(concat(&second, &first));
-                }
-                RegexToken::Union => {
-                    let first = automatons.pop().unwrap();
-                    let second = automatons.pop().unwrap();
-                    automatons.push(union(&second, &first));
-                }
-                RegexToken::Character(c) => automatons.push(NDFA::from_char(c)),
-                RegexToken::PositiveClosure => {
-                    let last = automatons.pop().unwrap();
-                    automatons.push(positive_clousure(&last));
-                }
-                RegexToken::Optional => {
-                    let last = automatons.pop().unwrap();
-                    automatons.push(optional(&last));
-                }
-                // This should not ocurr, since the Shunting Yard algorithm
-                // removes parens.
-                // TODO: Improve error handling
-                RegexToken::OpenParen => unreachable!(),
-                RegexToken::CloseParen => unreachable!(),
-            }
-        }
-
-        automatons.pop().unwrap()
-    }
-
-    /// Simulates one step of the NFA, moving from the current set of states
-    /// based on a single character input. Epsilon transitions are not followed.
-    pub fn simulate_non_empty_step(&self, states: &BTreeSet<usize>, char: char) -> BTreeSet<usize> {
-        states
-            .iter()
-            .flat_map(|state| {
-                self.table[*state]
-                    .iter()
-                    .filter_map(|arrow| arrow.accept(&char))
-            })
-            .collect()
-    }
-
-    pub fn move_c(&self, states: &BTreeSet<usize>, char: char) -> BTreeSet<usize> {
-        self.epsilon_closure(&self.simulate_non_empty_step(states, char))
-    }
-
-    /// Computes the epsilon closure of a set of states.
-    ///
-    /// This finds all states reachable from the initial set of states by following
-    /// only epsilon transitions.
-    pub fn epsilon_closure(&self, states: &BTreeSet<usize>) -> BTreeSet<usize> {
-        let mut unchecked: BTreeSet<usize> = BTreeSet::from_iter(states.clone().into_iter());
-
-        let mut checked: BTreeSet<usize> = BTreeSet::new();
-
-        while !unchecked.is_empty() {
-            let state = unchecked.pop_first().unwrap();
-            checked.insert(state);
-            for new_state in self.table[state].iter().filter_map(|arrow| arrow.epsilon()) {
-                if !unchecked.contains(&new_state) & !checked.contains(&new_state) {
-                    unchecked.insert(new_state);
-                }
-            }
-        }
-
-        checked
-    }
-
-    /// Determines if the automaton accepts a given input string.
-    ///
-    /// The simulation proceeds by iteratively calculating the epsilon closure
-    /// and then performing a character-based step for each character in the input.
-    pub fn accept(&self, input: &str) -> bool {
-        let mut states = BTreeSet::from([self.starting]);
-
-        for char in input.chars() {
-            states = self.epsilon_closure(&states);
-            states = self.simulate_non_empty_step(&states, char);
-        }
-        states = self.epsilon_closure(&states);
-
-        states.contains(&self.final_state)
-    }
-
-    pub fn to_graphviz(&self) -> String {
-        let preamble = r#"digraph {
-rankdir = LR;
-ranksep = .75;
-    node [shape=circle style=filled]
-    start [shape=none, label="start", style=""]
-"#;
-
-        let arrows: Vec<String> = self
-            .table
-            .iter()
-            .enumerate()
-            .map(|(source, trans)| trans.iter().map(move |a| a.to_graphviz(source)))
-            .flatten()
-            .collect();
-
-        let final_state = format!("{} [shape=doublecircle]", self.final_state);
-
-        format!(
-            "{}\n{}\nstart->{}\n{}\n}}",
-            preamble,
-            final_state,
-            self.starting,
-            arrows.join("\n")
-        )
-    }
 }
 
 #[cfg(test)]
