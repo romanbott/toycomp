@@ -54,6 +54,15 @@ impl Arrow {
             }
         }
     }
+
+    fn to_graphviz(&self, source: usize) -> String {
+        match self {
+            Arrow::Epsilon(target) => format!("{} -> {} [label={}]", source, target, "ε"),
+            Arrow::Labeled((label, target)) => {
+                format!("{} -> {} [label={}]", source, target, label)
+            }
+        }
+    }
 }
 
 /// Represents a Non-deterministic Finite Automaton (NFA).
@@ -302,6 +311,33 @@ impl NDFA {
         states = self.epsilon_closure(&states);
 
         states.contains(&self.final_state)
+    }
+
+    pub fn to_graphviz(&self) -> String {
+        let preamble = r#"digraph {
+rankdir = LR;
+ranksep = .75;
+    node [shape=circle style=filled]
+    start [shape=none, label="start", style=""]
+"#;
+
+        let arrows: Vec<String> = self
+            .table
+            .iter()
+            .enumerate()
+            .map(|(source, trans)| trans.iter().map(move |a| a.to_graphviz(source)))
+            .flatten()
+            .collect();
+
+        let final_state = format!("{} [shape=doublecircle]", self.final_state);
+
+        format!(
+            "{}\n{}\nstart->{}\n{}\n}}",
+            preamble,
+            final_state,
+            self.starting,
+            arrows.join("\n")
+        )
     }
 }
 

@@ -9,6 +9,10 @@ struct LabeledArrow {
 }
 
 impl LabeledArrow {
+    fn to_graphviz(&self, source: &usize) -> String {
+        format!("{} -> {} [label={}]", source, self.target, self.label)
+    }
+
     fn move_c(&self, char: char) -> Option<usize> {
         if self.label == char {
             Some(self.target)
@@ -45,6 +49,37 @@ impl DFA {
 
     pub fn from_regex(regex: &str) -> Self {
         NDFA::from_regex(regex).into()
+    }
+
+    pub fn to_graphviz(&self) -> String {
+        let preamble = r#"digraph {
+rankdir = LR;
+ranksep = .75;
+    node [shape=circle style=filled]
+    start [shape=none, label="start", style=""]
+"#;
+
+        let arrows: Vec<String> = self
+            .table
+            .iter()
+            .enumerate()
+            .map(|(source, trans)| trans.iter().map(move |a| a.to_graphviz(&source)))
+            .flatten()
+            .collect();
+
+        let final_states: Vec<String> = self
+            .final_states
+            .iter()
+            .map(|fs| format!("{} [shape=doublecircle]", fs))
+            .collect();
+
+        format!(
+            "{}\n{}\nstart->{}\n{}\n}}",
+            preamble,
+            final_states.join("\n"),
+            self.starting,
+            arrows.join("\n")
+        )
     }
 }
 
