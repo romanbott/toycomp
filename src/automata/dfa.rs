@@ -118,7 +118,7 @@ mod tests {
         let arrow = Arrow::Epsilon(1);
         let aut = NDFA {
             table: NDTable(vec![vec![arrow], vec![]]),
-            starting: 0,
+            initial_state: 0,
             final_state: 1,
         };
 

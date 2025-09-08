@@ -1,4 +1,7 @@
-use std::collections::{BTreeSet, VecDeque};
+use std::{
+    collections::{BTreeMap, BTreeSet, VecDeque},
+    usize,
+};
 
 use crate::automata::shunting_yard::{RegexToken, regex_to_atoms};
 
@@ -69,7 +72,7 @@ impl Arrow {
 pub struct NDFA {
     /// Table of transitions, each row represents a state.
     pub table: NDTable,
-    pub starting: usize,
+    pub initial_state: usize,
     pub final_state: usize,
 }
 
@@ -122,15 +125,13 @@ impl NDTable {
 
         checked
     }
-}
 
-impl NDFA {
-    pub fn worklist(&self) -> (Vec<Vec<(char, usize)>>, usize, BTreeSet<usize>) {
-        let alphabet = self.table.get_alphabet();
+    pub fn worklist(&self, initial_state: usize) -> BTreeSet<BTreeSet<usize>> {
+        let alphabet = self.get_alphabet();
         let mut unchecked: BTreeSet<BTreeSet<usize>> = BTreeSet::new();
         let mut checked: BTreeSet<BTreeSet<usize>> = BTreeSet::new();
 
-        let initial_state = self.table.epsilon_closure(&BTreeSet::from([self.starting]));
+        let initial_state = self.epsilon_closure(&BTreeSet::from([initial_state]));
 
         unchecked.insert(initial_state.clone());
 
@@ -139,28 +140,39 @@ impl NDFA {
             checked.insert(state.clone());
 
             for c in &alphabet {
-                let move_c = self.table.move_c(&state, *c);
+                let move_c = self.move_c(&state, *c);
 
                 if !move_c.is_empty() & !checked.contains(&move_c) {
                     unchecked.insert(move_c);
                 }
             }
         }
+        checked
+    }
+}
 
-        let checked: Vec<BTreeSet<usize>> = checked.into_iter().collect();
+impl NDFA {
+    pub fn worklist(&self) -> (Vec<Vec<(char, usize)>>, usize, BTreeSet<usize>) {
+        let initial_state = self
+            .table
+            .epsilon_closure(&BTreeSet::from([self.initial_state]));
+        let checked: Vec<BTreeSet<usize>> = self
+            .table
+            .worklist(self.initial_state)
+            .into_iter()
+            .collect();
+        let alphabet = self.table.get_alphabet();
 
         let table = checked
             .iter()
-            .map(|s| {
+            .map(|source| {
                 alphabet
                     .iter()
                     .filter_map(|c| {
-                        let moved = self.table.move_c(s, *c);
-                        if moved.is_empty() {
-                            None
-                        } else {
-                            Some((*c, checked.binary_search(&moved).unwrap()))
-                        }
+                        checked
+                            .binary_search(&self.table.move_c(source, *c))
+                            .ok()
+                            .map(|target| (*c, target))
                     })
                     .collect()
             })
@@ -169,13 +181,7 @@ impl NDFA {
         let final_states = checked
             .iter()
             .enumerate()
-            .filter_map(|(i, s)| {
-                if s.contains(&self.final_state) {
-                    Some(i)
-                } else {
-                    None
-                }
-            })
+            .filter_map(|(i, s)| s.contains(&self.final_state).then(|| i))
             .collect();
 
         (
@@ -185,12 +191,11 @@ impl NDFA {
         )
     }
 
-
     /// Creates a new NFA that accepts a single character.
     fn from_char(c: char) -> NDFA {
         NDFA {
             table: NDTable(vec![vec![Arrow::Labeled((c, 1))], vec![]]),
-            starting: 0,
+            initial_state: 0,
             final_state: 1,
         }
     }
@@ -248,7 +253,7 @@ impl NDFA {
     /// The simulation proceeds by iteratively calculating the epsilon closure
     /// and then performing a character-based step for each character in the input.
     pub fn accept(&self, input: &str) -> bool {
-        let mut states = BTreeSet::from([self.starting]);
+        let mut states = BTreeSet::from([self.initial_state]);
 
         for char in input.chars() {
             states = self.table.epsilon_closure(&states);
@@ -281,7 +286,7 @@ ranksep = .75;
             "{}\n{}\nstart->{}\n{}\n}}",
             preamble,
             final_state,
-            self.starting,
+            self.initial_state,
             arrows.join("\n")
         )
     }
@@ -322,11 +327,12 @@ fn kleene(automaton: &NDFA) -> NDFA {
 
     // Add epsilon transition from the new start state to the old start state
     automaton
-        .table.0
-        .push(vec![Arrow::Epsilon(automaton.starting)]);
+        .table
+        .0
+        .push(vec![Arrow::Epsilon(automaton.initial_state)]);
 
     // Update start and final states to the new ones
-    automaton.starting = old_len;
+    automaton.initial_state = old_len;
     automaton.final_state = old_len;
     automaton
 }
@@ -339,7 +345,7 @@ fn positive_clousure(automaton: &NDFA) -> NDFA {
     let mut automaton = automaton.clone();
 
     // Add an epsilon transition from the final state back to the starting state
-    automaton.table.0[automaton.final_state].push(Arrow::Epsilon(automaton.starting));
+    automaton.table.0[automaton.final_state].push(Arrow::Epsilon(automaton.initial_state));
 
     automaton
 }
@@ -352,7 +358,7 @@ fn optional(automaton: &NDFA) -> NDFA {
     let mut automaton = automaton.clone();
 
     // Add an epsilon transition from the starting state to the final state
-    automaton.table.0[automaton.starting].push(Arrow::Epsilon(automaton.final_state));
+    automaton.table.0[automaton.initial_state].push(Arrow::Epsilon(automaton.final_state));
 
     automaton
 }
@@ -375,14 +381,18 @@ fn union(left: &NDFA, right: &NDFA) -> NDFA {
 
     // Add epsilon transitions from the new start state to the old start states
     joined.0.push(vec![
-        Arrow::Epsilon(left.starting),
-        Arrow::Epsilon(right.starting + left_len),
+        Arrow::Epsilon(left.initial_state),
+        Arrow::Epsilon(right.initial_state + left_len),
     ]);
 
     // Add final state
     joined.0.push(vec![]);
 
-    NDFA { table: joined, starting, final_state}
+    NDFA {
+        table: joined,
+        initial_state: starting,
+        final_state,
+    }
 }
 
 /// Applies the concatenation operator to two automata.
@@ -392,13 +402,17 @@ fn union(left: &NDFA, right: &NDFA) -> NDFA {
 fn concat(left: &NDFA, right: &NDFA) -> NDFA {
     let mut joined = append_tables(&left.table, &right.table);
 
-    let final_state=right.final_state + left.table.0.len();
+    let final_state = right.final_state + left.table.0.len();
 
     // Add an epsilon transition from the first automaton's final state to the
     // second automaton's start state.
-    joined.0[left.final_state].push(Arrow::Epsilon(right.starting + left.table.0.len()));
+    joined.0[left.final_state].push(Arrow::Epsilon(right.initial_state + left.table.0.len()));
 
-    NDFA { table: joined, starting: left.starting, final_state}
+    NDFA {
+        table: joined,
+        initial_state: left.initial_state,
+        final_state,
+    }
 }
 
 #[cfg(test)]
@@ -411,7 +425,7 @@ mod tests {
         let arrow = Arrow::Epsilon(1);
         let aut = NDFA {
             table: NDTable(vec![vec![arrow], vec![]]),
-            starting: 0,
+            initial_state: 0,
             final_state: 1,
         };
         let ec = aut.table.epsilon_closure(&BTreeSet::from([0]));
@@ -424,7 +438,7 @@ mod tests {
         let arrow = Arrow::Labeled(('a', 1));
         let aut = NDFA {
             table: NDTable(vec![vec![arrow], vec![]]),
-            starting: 0,
+            initial_state: 0,
             final_state: 1,
         };
 
@@ -439,7 +453,7 @@ mod tests {
         let b_arrow = Arrow::Labeled(('b', 2));
         let aut = NDFA {
             table: NDTable(vec![vec![a_arrow], vec![b_arrow], vec![]]),
-            starting: 0,
+            initial_state: 0,
             final_state: 2,
         };
 
@@ -454,12 +468,12 @@ mod tests {
         let b_arrow = Arrow::Labeled(('b', 1));
         let aut1 = NDFA {
             table: NDTable(vec![vec![a_arrow], vec![]]),
-            starting: 0,
+            initial_state: 0,
             final_state: 1,
         };
         let aut2 = NDFA {
             table: NDTable(vec![vec![b_arrow], vec![]]),
-            starting: 0,
+            initial_state: 0,
             final_state: 1,
         };
 
@@ -476,12 +490,12 @@ mod tests {
         let b_arrow = Arrow::Labeled(('b', 1));
         let aut1 = NDFA {
             table: NDTable(vec![vec![a_arrow], vec![]]),
-            starting: 0,
+            initial_state: 0,
             final_state: 1,
         };
         let aut2 = NDFA {
             table: NDTable(vec![vec![b_arrow], vec![]]),
-            starting: 0,
+            initial_state: 0,
             final_state: 1,
         };
 
@@ -527,7 +541,7 @@ mod tests {
 
         let mut aut = NDFA {
             table: NDTable(vec![]),
-            starting: 0,
+            initial_state: 0,
             final_state: 0,
         };
         for _ in 0..5 {
