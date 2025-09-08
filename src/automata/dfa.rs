@@ -1,6 +1,8 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::NDFA;
+
+use super::tagged_ndfa::TaggedNDFA;
 
 #[derive(Debug, Clone, PartialEq)]
 struct LabeledArrow {
@@ -100,6 +102,48 @@ impl From<NDFA> for DFA {
             .collect();
 
         DFA {
+            table,
+            initial_state,
+            final_states,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TaggedDFA {
+    /// Table of transitions, each row represents a state.
+    table: Vec<Vec<LabeledArrow>>,
+    initial_state: usize,
+    final_states: BTreeMap<usize, String>,
+}
+
+impl TaggedDFA {
+    pub fn move_c(&self, state: usize, char: char) -> Option<usize> {
+        self.table[state].iter().find_map(|a| a.move_c(char))
+    }
+
+    pub fn accept(&self, input: &str) -> Option<&str> {
+        let mut state = self.initial_state;
+        for char in input.chars() {
+            if let Some(next) = self.move_c(state, char) {
+                state = next;
+            } else {
+                return None;
+            }
+        }
+        self.final_states.get(&state).map(String::as_str)
+    }
+}
+
+impl From<TaggedNDFA> for TaggedDFA {
+    fn from(ndfa: TaggedNDFA) -> Self {
+        let (table, initial_state, final_states) = ndfa.worklist();
+        let table = table
+            .into_iter()
+            .map(|row| row.into_iter().map(LabeledArrow::from).collect())
+            .collect();
+
+        TaggedDFA {
             table,
             initial_state,
             final_states,
@@ -284,5 +328,35 @@ mod tests_adrian {
         for input in rejected {
             assert!(!aut.accept(input));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests_tagged {
+    use crate::{automata::{dfa::TaggedDFA, tagged_ndfa::TaggedNDFA}, lexer::Pattern, Lexer};
+
+    #[test]
+    fn tagged_from_lexer2() {
+        let lex = Lexer {
+            patterns: vec![
+                Pattern {
+                    regex: "(a|b)c".to_string(),
+                    tag: "tag1".to_string(),
+                },
+                Pattern {
+                    regex: "b*".to_string(),
+                    tag: "multi b".to_string(),
+                },
+            ],
+        };
+
+        let tagged_ndfa: TaggedNDFA = lex.into();
+        let tagged_dfa: TaggedDFA = tagged_ndfa.into();
+
+        dbg!(&tagged_dfa);
+
+        assert_eq!(Some("multi b"), tagged_dfa.accept("bbbb").as_deref());
+        assert_eq!(Some("tag1"), tagged_dfa.accept("bc").as_deref());
+        assert_eq!(None, tagged_dfa.accept("c").as_deref());
     }
 }

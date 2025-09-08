@@ -35,12 +35,13 @@ impl From<Lexer> for TaggedNDFA {
         let mut final_states: BTreeMap<usize, String> = BTreeMap::new();
 
         for (tag, ndfa) in tagged_ndfas {
-            starting_states.push(ndfa.starting + total_shift);
+            starting_states.push(ndfa.initial_state + total_shift);
 
             final_states.insert(ndfa.final_state + total_shift, tag);
 
             shifted_tables.push(
-                ndfa.table.0
+                ndfa.table
+                    .0
                     .iter()
                     .map(|row| {
                         row.iter()
@@ -88,6 +89,51 @@ impl TaggedNDFA {
         }
 
         None
+    }
+
+    pub fn worklist(&self) -> (Vec<Vec<(char, usize)>>, usize, BTreeMap<usize, String>) {
+        let initial_state = self
+            .table
+            .epsilon_closure(&BTreeSet::from([self.initial_state]));
+        let checked: Vec<BTreeSet<usize>> = self
+            .table
+            .worklist(self.initial_state)
+            .into_iter()
+            .collect();
+        let alphabet = self.table.get_alphabet();
+
+        let table = checked
+            .iter()
+            .map(|source| {
+                alphabet
+                    .iter()
+                    .filter_map(|c| {
+                        checked
+                            .binary_search(&self.table.move_c(source, *c))
+                            .ok()
+                            .map(|target| (*c, target))
+                    })
+                    .collect()
+            })
+            .collect();
+
+        let final_states: BTreeMap<usize, String> = checked
+            .iter()
+            .enumerate()
+            .filter_map(|(i, states)| {
+                states
+                    .iter()
+                    .filter_map(|s| self.final_states.get(s).map(String::clone))
+                    .next()
+                    .map(|l| (i, l))
+            })
+            .collect();
+
+        (
+            table,
+            checked.binary_search(&initial_state).unwrap(),
+            final_states,
+        )
     }
 }
 
