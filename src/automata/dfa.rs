@@ -111,13 +111,13 @@ impl From<NDFA> for DFA {
 mod tests {
 
     use super::*;
-    use crate::automata::ndfa::Arrow;
+    use crate::automata::ndfa::{Arrow, NDTable};
 
     #[test]
     fn test_basic_to_dfa() {
         let arrow = Arrow::Epsilon(1);
         let aut = NDFA {
-            table: vec![vec![arrow], vec![]],
+            table: NDTable(vec![vec![arrow], vec![]]),
             starting: 0,
             final_state: 1,
         };

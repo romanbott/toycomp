@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     Lexer,
-    automata::{Arrow, NDFA, ndfa::NDFATable},
+    automata::{Arrow, NDFA, ndfa::NDTable},
 };
 
 /// Represents a Tagged Non-deterministic Finite Automaton (NFA).
@@ -14,7 +14,7 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct TaggedNDFA {
     /// Table of transitions, each row represents a state.
-    pub table: Vec<Vec<Arrow>>,
+    pub table: NDTable,
     pub initial_state: usize,
     pub final_states: BTreeMap<usize, String>,
 }
@@ -27,7 +27,7 @@ impl From<Lexer> for TaggedNDFA {
             .map(|p| (p.tag.clone(), NDFA::from_regex(p.regex.as_str())))
             .collect();
 
-        let mut shifted_tables: Vec<NDFATable> = Vec::new();
+        let mut shifted_tables: Vec<Vec<Vec<Arrow>>> = Vec::new();
 
         let mut total_shift = 0;
 
@@ -40,7 +40,7 @@ impl From<Lexer> for TaggedNDFA {
             final_states.insert(ndfa.final_state + total_shift, tag);
 
             shifted_tables.push(
-                ndfa.table
+                ndfa.table.0
                     .iter()
                     .map(|row| {
                         row.iter()
@@ -50,7 +50,7 @@ impl From<Lexer> for TaggedNDFA {
                     .collect(),
             );
 
-            total_shift += ndfa.table.len();
+            total_shift += ndfa.table.0.len();
         }
 
         let mut table = shifted_tables.concat();
@@ -62,7 +62,7 @@ impl From<Lexer> for TaggedNDFA {
         let initial_state = table.len() - 1;
 
         TaggedNDFA {
-            table,
+            table: NDTable(table),
             initial_state,
             final_states,
         }
@@ -70,52 +70,14 @@ impl From<Lexer> for TaggedNDFA {
 }
 
 impl TaggedNDFA {
-    /// Simulates one step of the NFA, moving from the current set of states
-    /// based on a single character input. Epsilon transitions are not followed.
-    pub fn simulate_non_empty_step(&self, states: &BTreeSet<usize>, char: char) -> BTreeSet<usize> {
-        states
-            .iter()
-            .flat_map(|state| {
-                self.table[*state]
-                    .iter()
-                    .filter_map(|arrow| arrow.accept(&char))
-            })
-            .collect()
-    }
-
-    pub fn move_c(&self, states: &BTreeSet<usize>, char: char) -> BTreeSet<usize> {
-        self.epsilon_closure(&self.simulate_non_empty_step(states, char))
-    }
-
-    /// Computes the epsilon closure of a set of states.
-    ///
-    /// This finds all states reachable from the initial set of states by following
-    /// only epsilon transitions.
-    pub fn epsilon_closure(&self, states: &BTreeSet<usize>) -> BTreeSet<usize> {
-        let mut unchecked: BTreeSet<usize> = BTreeSet::from_iter(states.clone());
-
-        let mut checked: BTreeSet<usize> = BTreeSet::new();
-
-        while !unchecked.is_empty() {
-            let state = unchecked.pop_first().unwrap();
-            checked.insert(state);
-            for new_state in self.table[state].iter().filter_map(|arrow| arrow.epsilon()) {
-                if !unchecked.contains(&new_state) & !checked.contains(&new_state) {
-                    unchecked.insert(new_state);
-                }
-            }
-        }
-
-        checked
-    }
     pub fn accept(&self, input: &str) -> Option<String> {
         let mut states = BTreeSet::from([self.initial_state]);
 
         for char in input.chars() {
-            states = self.epsilon_closure(&states);
-            states = self.simulate_non_empty_step(&states, char);
+            states = self.table.epsilon_closure(&states);
+            states = self.table.simulate_non_empty_step(&states, char);
         }
-        states = self.epsilon_closure(&states);
+        states = self.table.epsilon_closure(&states);
 
         //TODO: implement priorities for tags when there are different matched tags
 
