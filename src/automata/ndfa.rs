@@ -22,7 +22,7 @@ impl Arrow {
 
     /// Shifts the target state of the arrow by a given amount.
     /// This is used when combining automata to adjust state indices.
-    fn move_target(&self, shift: usize) -> Arrow {
+    pub fn move_target(&self, shift: usize) -> Arrow {
         match self {
             Arrow::Epsilon(t) => Arrow::Epsilon(t + shift),
             Arrow::Labeled((l, t)) => Arrow::Labeled((*l, t + shift)),
@@ -30,7 +30,7 @@ impl Arrow {
     }
 
     /// Returns the target state if the arrow is an empty transition.
-    fn epsilon(&self) -> Option<usize> {
+    pub fn epsilon(&self) -> Option<usize> {
         match self {
             Arrow::Epsilon(t) => Some(*t),
             Arrow::Labeled(_) => None,
@@ -39,7 +39,7 @@ impl Arrow {
 
     /// Returns the target state if the arrow is a labeled transition and the
     /// given character matches the label.
-    fn accept(&self, char: &char) -> Option<usize> {
+    pub fn accept(&self, char: &char) -> Option<usize> {
         match self {
             Arrow::Epsilon(_) => None,
             Arrow::Labeled((l, t)) => {
@@ -72,6 +72,8 @@ pub struct NDFA {
     pub starting: usize,
     pub final_state: usize,
 }
+
+pub type NDFATable = Vec<Vec<Arrow>>;
 
 impl NDFA {
     pub fn worklist(&self) -> (Vec<Vec<(char, usize)>>, usize, BTreeSet<usize>) {
@@ -279,6 +281,7 @@ ranksep = .75;
         )
     }
 }
+
 /// Utility function to append the tables of two NFAs.
 ///
 /// The states of the `right` automaton are shifted to avoid conflicts with the
