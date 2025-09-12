@@ -1,4 +1,7 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap},
+    usize,
+};
 
 use crate::NDFA;
 
@@ -30,6 +33,73 @@ impl From<(char, usize)> for LabeledArrow {
             label: value.0,
             target: value.1,
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DTable(pub Vec<Vec<LabeledArrow>>);
+
+impl DTable {
+    pub fn get_alphabet(&self) -> BTreeSet<char> {
+        self.0
+            .iter()
+            .flat_map(|row| row.iter().map(|a| a.label))
+            .collect()
+    }
+
+    pub fn move_c(&self, state: usize, char: char) -> Option<usize> {
+        self.0[state].iter().find_map(|a| a.move_c(char))
+    }
+
+    pub fn get_maximally_compatible(
+        &self,
+        states: &BTreeSet<usize>,
+        groups: &[usize],
+    ) -> Vec<Vec<usize>> {
+        let alphabet = self.get_alphabet();
+
+        let mut signatures: HashMap<Vec<Option<usize>>, Vec<usize>> = HashMap::new();
+
+        for state in states {
+            let signature = alphabet
+                .iter()
+                .map(|c| self.move_c(*state, *c).map(|s| groups[s]))
+                .collect();
+
+            if let Some(group) = signatures.get_mut(&signature) {
+                group.push(*state);
+            } else {
+                signatures.insert(signature, vec![*state]);
+            }
+        }
+        signatures.into_values().collect()
+    }
+
+    pub fn table_from_groups(&self, groups: &[BTreeSet<usize>]) -> Vec<Vec<(char, usize)>> {
+        let alphabet = self.get_alphabet();
+
+        groups
+            .iter()
+            .map(|source| {
+                alphabet
+                    .iter()
+                    .filter_map(|c| {
+                        groups
+                            .iter()
+                            .enumerate()
+                            .filter_map(|(i, g)| {
+                                if let Some(moved) = self.move_c(*source.first().unwrap(), *c) {
+                                    g.contains(&moved).then_some(i)
+                                } else {
+                                    None
+                                }
+                            })
+                            .map(|target| (*c, target))
+                            .next()
+                    })
+                    .collect()
+            })
+            .collect()
     }
 }
 
@@ -112,14 +182,49 @@ impl From<NDFA> for DFA {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TaggedDFA {
     /// Table of transitions, each row represents a state.
-    table: Vec<Vec<LabeledArrow>>,
+    table: DTable,
     initial_state: usize,
     final_states: BTreeMap<usize, String>,
 }
 
 impl TaggedDFA {
+    pub fn to_graphviz(&self) -> String {
+        let preamble = r#"digraph {
+rankdir = LR;
+ranksep = .75;
+    node [shape=circle style=filled]
+    start [shape=none, label="start", style=""]
+"#;
+
+        let arrows: Vec<String> = self
+            .table
+            .0
+            .iter()
+            .enumerate()
+            .flat_map(|(source, trans)| trans.iter().map(move |a| a.to_graphviz(&source)))
+            .collect();
+
+        // let final_states: Vec<String> = self
+        //     .final_states
+        //     .iter()
+        //     .map(|fs| format!("{} [shape=doublecircle]", fs))
+        //     .collect();
+        let final_states = vec![""];
+
+        format!(
+            "{}\n{}\nstart->{}\n{}\n}}",
+            preamble,
+            final_states.join("\n"),
+            self.initial_state,
+            arrows.join("\n")
+        )
+    }
+    pub fn num_states(&self) -> usize {
+        self.table.0.len()
+    }
+
     pub fn move_c(&self, state: usize, char: char) -> Option<usize> {
-        self.table[state].iter().find_map(|a| a.move_c(char))
+        self.table.move_c(state, char)
     }
 
     pub fn accept(&self, input: &str) -> Option<&str> {
@@ -133,15 +238,116 @@ impl TaggedDFA {
         }
         self.final_states.get(&state).map(String::as_str)
     }
+
+    pub fn minimize(&self) -> TaggedDFA {
+        let mut groups: BTreeSet<BTreeSet<usize>> = BTreeSet::new();
+
+        for tag in self.final_states.values() {
+            let tagged = self
+                .final_states
+                .keys()
+                .filter_map(|s| (self.final_states.get(s).unwrap() == tag).then_some(*s))
+                .collect();
+            groups.insert(tagged);
+        }
+
+        groups.insert(
+            (0..self.num_states())
+                .filter(|s| !self.final_states.contains_key(s))
+                .collect(),
+        );
+
+        dbg!(&groups);
+
+        let mut maximally_compatible = false;
+        let mut marked: BTreeSet<BTreeSet<usize>> = BTreeSet::new();
+
+        'outer: while !maximally_compatible {
+            let state_to_group: Vec<usize> = (0..self.num_states())
+                .map(|s| {
+                    groups
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(i, g)| g.contains(&s).then_some(i))
+                        .next()
+                        .unwrap()
+                })
+                .collect();
+
+            dbg!(&state_to_group);
+
+            while let Some(g) = groups.pop_first() {
+                dbg!(&g);
+                let maximally_compatible_subgroups =
+                    self.table.get_maximally_compatible(&g, &state_to_group);
+
+                dbg!(&maximally_compatible_subgroups);
+                dbg!(&groups);
+                dbg!(&marked);
+
+                if dbg!(maximally_compatible_subgroups.len() == 1) {
+                    marked.insert(
+                        maximally_compatible_subgroups[0]
+                            .clone()
+                            .into_iter()
+                            .collect(),
+                    );
+                } else {
+                    maximally_compatible_subgroups.into_iter().for_each(|v| {
+                        groups.insert(v.into_iter().collect());
+                    });
+
+                    while let Some(g) = marked.pop_first() {
+                        groups.insert(g);
+                    }
+
+                    continue 'outer;
+                }
+            }
+            maximally_compatible = true;
+        }
+
+        let groups: Vec<BTreeSet<usize>> = marked.into_iter().collect();
+        let table = self
+            .table
+            .table_from_groups(&groups)
+            .into_iter()
+            .map(|row| row.into_iter().map(LabeledArrow::from).collect())
+            .collect();
+
+        let mut final_states = BTreeMap::new();
+
+        for (i, group) in groups.iter().enumerate() {
+            for state in group {
+                if let Some(tag) = self.final_states.get(&state) {
+                    final_states.insert(i, tag.to_owned());
+                    break;
+                }
+            }
+        }
+
+        TaggedDFA {
+            table: DTable(table),
+            initial_state: groups
+                .iter()
+                .enumerate()
+                .filter_map(|(i, g)| (g.contains(&self.initial_state)).then_some(i))
+                .next()
+                .unwrap(),
+            final_states,
+        }
+    }
 }
 
 impl From<TaggedNDFA> for TaggedDFA {
     fn from(ndfa: TaggedNDFA) -> Self {
         let (table, initial_state, final_states) = ndfa.worklist();
-        let table = table
-            .into_iter()
-            .map(|row| row.into_iter().map(LabeledArrow::from).collect())
-            .collect();
+        let table = DTable(
+            table
+                .into_iter()
+                .map(|row| row.into_iter().map(LabeledArrow::from).collect())
+                .collect(),
+        );
 
         TaggedDFA {
             table,
@@ -333,19 +539,23 @@ mod tests_adrian {
 
 #[cfg(test)]
 mod tests_tagged {
-    use crate::{automata::{dfa::TaggedDFA, tagged_ndfa::TaggedNDFA}, lexer::Pattern, Lexer};
+    use crate::{
+        Lexer,
+        automata::{dfa::TaggedDFA, tagged_ndfa::TaggedNDFA},
+        lexer::Pattern,
+    };
 
     #[test]
     fn tagged_from_lexer2() {
         let lex = Lexer {
             patterns: vec![
                 Pattern {
-                    regex: "(a|b)c".to_string(),
-                    tag: "tag1".to_string(),
+                    regex: "(if)|(else)|(then)".to_string(),
+                    tag: "keyword".to_string(),
                 },
                 Pattern {
-                    regex: "b*".to_string(),
-                    tag: "multi b".to_string(),
+                    regex: "(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z)+".to_string(),
+                    tag: "identifier".to_string(),
                 },
             ],
         };
@@ -353,10 +563,46 @@ mod tests_tagged {
         let tagged_ndfa: TaggedNDFA = lex.into();
         let tagged_dfa: TaggedDFA = tagged_ndfa.into();
 
+        assert_eq!(Some("keyword"), tagged_dfa.accept("if").as_deref());
+        assert_eq!(Some("keyword"), tagged_dfa.accept("then").as_deref());
+        assert_eq!(Some("keyword"), tagged_dfa.accept("else").as_deref());
+        assert_eq!(Some("identifier"), tagged_dfa.accept("hola").as_deref());
+        assert_eq!(Some("identifier"), tagged_dfa.accept("ifident").as_deref());
+        assert_eq!(None, tagged_dfa.accept("hola1").as_deref());
+    }
+
+    #[test]
+    fn minimize_tagged() {
+        let lex = Lexer {
+            patterns: vec![
+                Pattern {
+                    regex: "a*b".to_string(),
+                    tag: "tag1".to_string(),
+                },
+                Pattern {
+                    regex: "(aab|b)*".to_string(),
+                    tag: "tag2".to_string(),
+                },
+            ],
+        };
+
+        let tagged_ndfa: TaggedNDFA = lex.into();
+        let tagged_dfa: TaggedDFA = tagged_ndfa.into();
+
+        let minimized = tagged_dfa.minimize();
+
+        dbg!(minimized.table.0.len());
+        dbg!(tagged_dfa.table.0.len());
+
+        println!("{}", &minimized.to_graphviz());
+        println!("{}", &tagged_dfa.to_graphviz());
+        dbg!(&minimized);
         dbg!(&tagged_dfa);
 
-        assert_eq!(Some("multi b"), tagged_dfa.accept("bbbb").as_deref());
-        assert_eq!(Some("tag1"), tagged_dfa.accept("bc").as_deref());
-        assert_eq!(None, tagged_dfa.accept("c").as_deref());
+        assert_eq!(tagged_dfa.accept("ab"), minimized.accept("ab"));
+        assert_eq!(tagged_dfa.accept("aab"), minimized.accept("aab"));
+        assert_eq!(tagged_dfa.accept("aabbbbaab"), minimized.accept("aabbbbaab"));
+        assert_eq!(tagged_dfa.accept("b"), minimized.accept("b"));
+        assert_eq!(tagged_dfa.accept("c"), minimized.accept("c"));
     }
 }

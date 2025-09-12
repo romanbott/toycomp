@@ -149,6 +149,25 @@ impl NDTable {
         }
         checked
     }
+
+    pub fn table_from_groups(&self, groups: &[BTreeSet<usize>]) -> Vec<Vec<(char, usize)>>{
+        let alphabet = self.get_alphabet();
+
+        groups
+            .iter()
+            .map(|source| {
+                alphabet
+                    .iter()
+                    .filter_map(|c| {
+                        groups
+                            .binary_search(&self.move_c(source, *c))
+                            .ok()
+                            .map(|target| (*c, target))
+                    })
+                    .collect()
+            })
+            .collect()
+    }
 }
 
 impl NDFA {
@@ -161,22 +180,8 @@ impl NDFA {
             .worklist(self.initial_state)
             .into_iter()
             .collect();
-        let alphabet = self.table.get_alphabet();
 
-        let table = checked
-            .iter()
-            .map(|source| {
-                alphabet
-                    .iter()
-                    .filter_map(|c| {
-                        checked
-                            .binary_search(&self.table.move_c(source, *c))
-                            .ok()
-                            .map(|target| (*c, target))
-                    })
-                    .collect()
-            })
-            .collect();
+        let table = self.table.table_from_groups(&checked);
 
         let final_states = checked
             .iter()
