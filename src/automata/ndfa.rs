@@ -1,7 +1,4 @@
-use std::{
-    collections::{BTreeMap, BTreeSet, VecDeque},
-    usize,
-};
+use std::collections::{BTreeSet, VecDeque};
 
 use crate::automata::shunting_yard::{RegexToken, regex_to_atoms};
 
@@ -55,6 +52,7 @@ impl Arrow {
         }
     }
 
+    #[allow(dead_code)]
     fn to_graphviz(&self, source: usize) -> String {
         match self {
             Arrow::Epsilon(target) => format!("{} -> {} [label={}]", source, target, "ε"),
@@ -186,7 +184,7 @@ impl NDFA {
         let final_states = checked
             .iter()
             .enumerate()
-            .filter_map(|(i, s)| s.contains(&self.final_state).then(|| i))
+            .filter_map(|(i, s)| s.contains(&self.final_state).then_some(i))
             .collect();
 
         (

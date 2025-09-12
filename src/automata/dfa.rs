@@ -1,14 +1,11 @@
-use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
-    usize,
-};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::{Lexer, NDFA};
 
 use super::tagged_ndfa::TaggedNDFA;
 
 #[derive(Debug, Clone, PartialEq)]
-struct LabeledArrow {
+pub struct LabeledArrow {
     label: char,
     target: usize,
 }
@@ -132,6 +129,7 @@ impl DFA {
         NDFA::from_regex(regex).into()
     }
 
+    #[allow(dead_code)]
     pub fn to_graphviz(&self) -> String {
         let preamble = r#"digraph {
 rankdir = LR;
@@ -188,6 +186,7 @@ pub struct TaggedDFA {
 }
 
 impl TaggedDFA {
+    #[allow(dead_code)]
     pub fn to_graphviz(&self) -> String {
         let preamble = r#"digraph {
 rankdir = LR;
@@ -204,12 +203,13 @@ ranksep = .75;
             .flat_map(|(source, trans)| trans.iter().map(move |a| a.to_graphviz(&source)))
             .collect();
 
+        // TODO: implement conversion of final states map to graphviz
         // let final_states: Vec<String> = self
         //     .final_states
         //     .iter()
         //     .map(|fs| format!("{} [shape=doublecircle]", fs))
         //     .collect();
-        let final_states = vec![""];
+        let final_states = [""];
 
         format!(
             "{}\n{}\nstart->{}\n{}\n}}",
@@ -319,7 +319,7 @@ ranksep = .75;
 
         for (i, group) in groups.iter().enumerate() {
             for state in group {
-                if let Some(tag) = self.final_states.get(&state) {
+                if let Some(tag) = self.final_states.get(state) {
                     final_states.insert(i, tag.to_owned());
                     break;
                 }

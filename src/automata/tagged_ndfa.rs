@@ -1,6 +1,5 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    usize,
 };
 
 use crate::{
@@ -71,6 +70,7 @@ impl From<&Lexer> for TaggedNDFA {
 }
 
 impl TaggedNDFA {
+    #[allow(dead_code)]
     pub fn accept(&self, input: &str) -> Option<String> {
         let mut states = BTreeSet::from([self.initial_state]);
 
@@ -123,7 +123,7 @@ impl TaggedNDFA {
             .filter_map(|(i, states)| {
                 states
                     .iter()
-                    .filter_map(|s| self.final_states.get(s).map(String::clone))
+                    .filter_map(|s| self.final_states.get(s).cloned())
                     .next()
                     .map(|l| (i, l))
             })
