@@ -3,7 +3,7 @@ use std::{
     usize,
 };
 
-use crate::NDFA;
+use crate::{Lexer, NDFA};
 
 use super::tagged_ndfa::TaggedNDFA;
 
@@ -357,6 +357,13 @@ impl From<TaggedNDFA> for TaggedDFA {
     }
 }
 
+impl From<&Lexer> for TaggedDFA {
+    fn from(lexer: &Lexer) -> Self {
+        let ndfa: TaggedNDFA = lexer.into();
+        ndfa.into()
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -560,7 +567,7 @@ mod tests_tagged {
             ],
         };
 
-        let tagged_ndfa: TaggedNDFA = lex.into();
+        let tagged_ndfa: TaggedNDFA = (&lex).into();
         let tagged_dfa: TaggedDFA = tagged_ndfa.into();
 
         assert_eq!(Some("keyword"), tagged_dfa.accept("if").as_deref());
@@ -586,7 +593,7 @@ mod tests_tagged {
             ],
         };
 
-        let tagged_ndfa: TaggedNDFA = lex.into();
+        let tagged_ndfa: TaggedNDFA = (&lex).into();
         let tagged_dfa: TaggedDFA = tagged_ndfa.into();
 
         let minimized = tagged_dfa.minimize();

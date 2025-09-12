@@ -19,8 +19,8 @@ pub struct TaggedNDFA {
     pub final_states: BTreeMap<usize, String>,
 }
 
-impl From<Lexer> for TaggedNDFA {
-    fn from(lexer: Lexer) -> Self {
+impl From<&Lexer> for TaggedNDFA {
+    fn from(lexer: &Lexer) -> Self {
         let tagged_ndfas: Vec<(String, NDFA)> = lexer
             .patterns
             .iter()
@@ -158,7 +158,7 @@ mod tests {
             ],
         };
 
-        let tagged_ndfa: TaggedNDFA = lex.into();
+        let tagged_ndfa: TaggedNDFA = (&lex).into();
 
         dbg!(&tagged_ndfa);
 
@@ -182,7 +182,7 @@ mod tests {
             ],
         };
 
-        let tagged_ndfa: TaggedNDFA = lex.into();
+        let tagged_ndfa: TaggedNDFA = (&lex).into();
 
         dbg!(&tagged_ndfa);
 
