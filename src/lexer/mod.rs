@@ -26,10 +26,10 @@ impl Lexer {
         let len = input.len();
         let mut tokens = Vec::new();
 
-        while token_begin < len -1 {
+        while token_begin < len {
             let mut last_lenght = 0;
             let mut last_tag = "";
-            while scan < len {
+            while scan < len + 1 {
                 if let Some(tag) = min.accept(&input[token_begin..scan]) {
                     last_tag = tag;
                     last_lenght = scan - token_begin;
@@ -38,7 +38,10 @@ impl Lexer {
             }
 
             if last_lenght == 0 {
-                panic!("Lexing error at position {}\n.Parsed tokens: {:?}", token_begin, tokens);
+                panic!(
+                    "Lexing error at position {}\n.Parsed tokens: {:?}",
+                    token_begin, tokens
+                );
             }
 
             tokens.push(Token {
@@ -79,13 +82,41 @@ mod tests {
             ],
         };
 
-
         let tokens = lex.consume("if myvar then else");
+
+        let expected_tokens = vec![
+            Token {
+                tag: "keyword".to_owned(),
+                value: "if".to_owned(),
+            },
+            Token {
+                tag: "white space".to_owned(),
+                value: " ".to_owned(),
+            },
+            Token {
+                tag: "identifier".to_owned(),
+                value: "myvar".to_owned(),
+            },
+            Token {
+                tag: "white space".to_owned(),
+                value: " ".to_owned(),
+            },
+            Token {
+                tag: "keyword".to_owned(),
+                value: "then".to_owned(),
+            },
+            Token {
+                tag: "white space".to_owned(),
+                value: " ".to_owned(),
+            },
+            Token {
+                tag: "keyword".to_owned(),
+                value: "else".to_owned(),
+            },
+        ];
 
         dbg!(&tokens);
 
-        assert_eq!(Token{ tag: "identifier".to_owned(), value: "myvar".to_owned() }, tokens[2]);
-        assert_eq!(Token{ tag: "keyword".to_owned(), value: "then".to_owned() }, tokens[4]);
-
+        assert_eq!(expected_tokens, tokens);
     }
 }
