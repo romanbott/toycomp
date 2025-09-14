@@ -4,6 +4,8 @@ use crate::{Lexer, NDFA};
 
 use super::tagged_ndfa::TaggedNDFA;
 
+use itertools::Itertools;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct LabeledArrow {
     label: char,
@@ -52,10 +54,10 @@ impl DTable {
         &self,
         states: &BTreeSet<usize>,
         groups: &[usize],
-    ) -> Vec<Vec<usize>> {
+    ) -> BTreeSet<BTreeSet<usize>> {
         let alphabet = self.get_alphabet();
 
-        let mut signatures: HashMap<Vec<Option<usize>>, Vec<usize>> = HashMap::new();
+        let mut signatures: HashMap<Vec<Option<usize>>, BTreeSet<usize>> = HashMap::new();
 
         for state in states {
             let signature = alphabet
@@ -64,39 +66,41 @@ impl DTable {
                 .collect();
 
             if let Some(group) = signatures.get_mut(&signature) {
-                group.push(*state);
+                group.insert(*state);
             } else {
-                signatures.insert(signature, vec![*state]);
+                signatures.insert(signature, BTreeSet::from([*state]));
             }
         }
         signatures.into_values().collect()
     }
 
     pub fn table_from_groups(&self, groups: &[BTreeSet<usize>]) -> Vec<Vec<(char, usize)>> {
-        let alphabet = self.get_alphabet();
+        let alphabet: Vec<_> = self.get_alphabet().into_iter().collect();
 
         groups
             .iter()
             .map(|source| {
                 alphabet
                     .iter()
-                    .filter_map(|c| {
-                        groups
-                            .iter()
-                            .enumerate()
-                            .filter_map(|(i, g)| {
-                                if let Some(moved) = self.move_c(*source.first().unwrap(), *c) {
-                                    g.contains(&moved).then_some(i)
-                                } else {
-                                    None
-                                }
-                            })
-                            .map(|target| (*c, target))
-                            .next()
+                    .cartesian_product(groups.iter().enumerate())
+                    .filter_map(|(c, (i, g))| {
+                        self.move_c(*source.first().unwrap(), *c)
+                            .and_then(|moved| g.contains(&moved).then_some((*c, i)))
                     })
                     .collect()
             })
             .collect()
+    }
+}
+
+impl From<Vec<Vec<(char, usize)>>> for DTable {
+    fn from(table: Vec<Vec<(char, usize)>>) -> Self {
+        DTable(
+            table
+                .into_iter()
+                .map(|row| row.into_iter().map(LabeledArrow::from).collect())
+                .collect(),
+        )
     }
 }
 
@@ -239,7 +243,7 @@ ranksep = .75;
         self.final_states.get(&state).map(String::as_str)
     }
 
-    pub fn minimize(&self) -> TaggedDFA {
+    pub fn get_final_and_non_final_partition(&self) -> BTreeSet<BTreeSet<usize>> {
         let mut groups: BTreeSet<BTreeSet<usize>> = BTreeSet::new();
 
         for tag in self.final_states.values() {
@@ -256,64 +260,43 @@ ranksep = .75;
                 .filter(|s| !self.final_states.contains_key(s))
                 .collect(),
         );
+        groups
+    }
 
-        dbg!(&groups);
+    pub fn minimize(&self) -> TaggedDFA {
+        let mut groups = self.get_final_and_non_final_partition();
 
-        let mut maximally_compatible = false;
         let mut marked: BTreeSet<BTreeSet<usize>> = BTreeSet::new();
 
-        'outer: while !maximally_compatible {
+        'outer: loop {
             let state_to_group: Vec<usize> = (0..self.num_states())
                 .map(|s| {
                     groups
                         .iter()
                         .enumerate()
-                        .filter_map(|(i, g)| g.contains(&s).then_some(i))
-                        .next()
+                        .find_map(|(i, g)| g.contains(&s).then_some(i))
                         .unwrap()
                 })
                 .collect();
 
-            dbg!(&state_to_group);
-
             while let Some(g) = groups.pop_first() {
-                dbg!(&g);
-                let maximally_compatible_subgroups =
+                let mut maximally_compatible_subgroups =
                     self.table.get_maximally_compatible(&g, &state_to_group);
 
-                dbg!(&maximally_compatible_subgroups);
-                dbg!(&groups);
-                dbg!(&marked);
-
-                if dbg!(maximally_compatible_subgroups.len() == 1) {
-                    marked.insert(
-                        maximally_compatible_subgroups[0]
-                            .clone()
-                            .into_iter()
-                            .collect(),
-                    );
+                if maximally_compatible_subgroups.len() == 1 {
+                    marked.append(&mut maximally_compatible_subgroups);
                 } else {
-                    maximally_compatible_subgroups.into_iter().for_each(|v| {
-                        groups.insert(v.into_iter().collect());
-                    });
-
-                    while let Some(g) = marked.pop_first() {
-                        groups.insert(g);
-                    }
+                    groups.append(&mut maximally_compatible_subgroups);
+                    groups.append(&mut marked);
 
                     continue 'outer;
                 }
             }
-            maximally_compatible = true;
+            break;
         }
 
         let groups: Vec<BTreeSet<usize>> = marked.into_iter().collect();
-        let table = self
-            .table
-            .table_from_groups(&groups)
-            .into_iter()
-            .map(|row| row.into_iter().map(LabeledArrow::from).collect())
-            .collect();
+        let table = self.table.table_from_groups(&groups).into();
 
         let mut final_states = BTreeMap::new();
 
@@ -325,15 +308,15 @@ ranksep = .75;
                 }
             }
         }
+        let initial_state = groups
+            .iter()
+            .enumerate()
+            .find_map(|(i, g)| (g.contains(&self.initial_state)).then_some(i))
+            .unwrap();
 
         TaggedDFA {
-            table: DTable(table),
-            initial_state: groups
-                .iter()
-                .enumerate()
-                .filter_map(|(i, g)| (g.contains(&self.initial_state)).then_some(i))
-                .next()
-                .unwrap(),
+            table,
+            initial_state,
             final_states,
         }
     }
@@ -608,7 +591,10 @@ mod tests_tagged {
 
         assert_eq!(tagged_dfa.accept("ab"), minimized.accept("ab"));
         assert_eq!(tagged_dfa.accept("aab"), minimized.accept("aab"));
-        assert_eq!(tagged_dfa.accept("aabbbbaab"), minimized.accept("aabbbbaab"));
+        assert_eq!(
+            tagged_dfa.accept("aabbbbaab"),
+            minimized.accept("aabbbbaab")
+        );
         assert_eq!(tagged_dfa.accept("b"), minimized.accept("b"));
         assert_eq!(tagged_dfa.accept("c"), minimized.accept("c"));
     }

@@ -7,3 +7,4 @@ edition = "2024"
 name = "regex-cli"
 
 [dependencies]
+itertools = "0.14.0"
