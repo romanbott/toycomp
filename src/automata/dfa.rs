@@ -207,13 +207,18 @@ ranksep = .75;
             .flat_map(|(source, trans)| trans.iter().map(move |a| a.to_graphviz(&source)))
             .collect();
 
-        // TODO: implement conversion of final states map to graphviz
-        // let final_states: Vec<String> = self
-        //     .final_states
-        //     .iter()
-        //     .map(|fs| format!("{} [shape=doublecircle]", fs))
-        //     .collect();
-        let final_states = [""];
+        let final_states: Vec<String> = self
+            .final_states
+            .iter()
+            .map(|(fs, tag)| format!(r##"
+subgraph cluster_final_state_{} {{
+	style=filled;
+	fillcolor="#bfffff";
+        {} [shape=doublecircle]
+	label = "{}";
+}}
+"##, fs, fs, tag))
+            .collect();
 
         format!(
             "{}\n{}\nstart->{}\n{}\n}}",
@@ -552,6 +557,7 @@ mod tests_tagged {
 
         let tagged_ndfa: TaggedNDFA = (&lex).into();
         let tagged_dfa: TaggedDFA = tagged_ndfa.into();
+        let minimized = tagged_dfa.minimize();
 
         assert_eq!(Some("keyword"), tagged_dfa.accept("if").as_deref());
         assert_eq!(Some("keyword"), tagged_dfa.accept("then").as_deref());
@@ -559,6 +565,9 @@ mod tests_tagged {
         assert_eq!(Some("identifier"), tagged_dfa.accept("hola").as_deref());
         assert_eq!(Some("identifier"), tagged_dfa.accept("ifident").as_deref());
         assert_eq!(None, tagged_dfa.accept("hola1").as_deref());
+        println!("{}", &minimized.to_graphviz());
+        println!("{}", &tagged_dfa.to_graphviz());
+        assert!(false)
     }
 
     #[test]
@@ -580,14 +589,6 @@ mod tests_tagged {
         let tagged_dfa: TaggedDFA = tagged_ndfa.into();
 
         let minimized = tagged_dfa.minimize();
-
-        dbg!(minimized.table.0.len());
-        dbg!(tagged_dfa.table.0.len());
-
-        println!("{}", &minimized.to_graphviz());
-        println!("{}", &tagged_dfa.to_graphviz());
-        dbg!(&minimized);
-        dbg!(&tagged_dfa);
 
         assert_eq!(tagged_dfa.accept("ab"), minimized.accept("ab"));
         assert_eq!(tagged_dfa.accept("aab"), minimized.accept("aab"));
