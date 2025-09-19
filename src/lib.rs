@@ -1,5 +1,6 @@
 mod automata;
 mod lexer;
+mod static_analizer;
 
 pub use automata::NDFA;
 pub use automata::DFA;
