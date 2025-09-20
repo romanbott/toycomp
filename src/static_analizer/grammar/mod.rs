@@ -170,7 +170,6 @@ impl Grammar {
                     first_left.insert(Symbol::Terminal('ε'));
                 }
             }
-            dbg!(&next_map);
 
             if curr_map == next_map {
                 return curr_map;
@@ -183,10 +182,10 @@ impl Grammar {
         let mut curr_map = BTreeMap::new();
 
         for s in &self.non_terminals {
-            if s != &self.start {
-                curr_map.insert(*s, BTreeSet::new());
-            } else {
+            if s == &self.start {
                 curr_map.insert(*s, BTreeSet::from([Symbol::End]));
+            } else {
+                curr_map.insert(*s, BTreeSet::new());
             }
         }
 
@@ -196,12 +195,12 @@ impl Grammar {
             let mut next_map = curr_map.clone();
 
             for prod in &self.productions {
-                let mut has_epsilon = true;
 
                 let mut right = prod.right.clone();
                 let mut remaining = right.as_mut_slice();
 
                 while let Some((first_symbol, rest)) = remaining.split_first_mut() {
+                    let mut has_epsilon = true;
                     if first_symbol.is_non_terminal() {
                         let follow_first_symbol = next_map.get_mut(first_symbol).unwrap();
 
@@ -216,7 +215,7 @@ impl Grammar {
 
                         if has_epsilon {
                             follow_first_symbol
-                                .append(&mut first_sets.get(&prod.left).unwrap().clone());
+                                .append(&mut curr_map.get(&prod.left).unwrap().clone());
                         }
                     }
                     remaining = rest;
@@ -260,7 +259,7 @@ mod tests {
     }
 
     #[test]
-    fn first() {
+    fn simple_grammar_first() {
         let grammar = "S -> aS|b";
 
         let parsed_grammar: Grammar = grammar.parse().unwrap();
@@ -274,7 +273,7 @@ mod tests {
     }
 
     #[test]
-    fn follow() {
+    fn simple_grammar_follow() {
         let grammar = "S -> aS|b";
 
         let parsed_grammar: Grammar = grammar.parse().unwrap();
@@ -282,5 +281,37 @@ mod tests {
         let follow_S = follow_sets.get(&Symbol::NonTerminal('S')).unwrap();
 
         assert!(follow_S.contains(&Symbol::End))
+    }
+
+    #[test]
+    fn epsilon_production_first() {
+        let grammar = "S -> ε|a";
+
+        let parsed_grammar: Grammar = grammar.parse().unwrap();
+        let first_sets = parsed_grammar.get_first();
+        let first_S = first_sets.get(&Symbol::NonTerminal('S')).unwrap();
+
+        assert_eq!(
+            first_S,
+            &BTreeSet::from([Symbol::Terminal('a'), Symbol::Terminal('ε'),])
+        )
+    }
+
+    #[test]
+    fn multiple_non_terminals_follow() {
+        let grammar = "S -> AB
+A -> a
+B -> b";
+
+        let parsed_grammar: Grammar = grammar.parse().unwrap();
+        let follow_sets = parsed_grammar.get_follow();
+        let follow_A = follow_sets.get(&Symbol::NonTerminal('A')).unwrap();
+        let follow_B = follow_sets.get(&Symbol::NonTerminal('B')).unwrap();
+
+        dbg!(follow_A);
+        dbg!(follow_B);
+
+        assert!(follow_A.contains(&Symbol::Terminal('b')));
+        assert!(follow_B.contains(&Symbol::End));
     }
 }
