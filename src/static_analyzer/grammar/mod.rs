@@ -47,6 +47,7 @@ impl<'a> Production<'a> {
     /// # Returns
     ///
     /// A `Production` rule with the given symbol on the left and epsilon on the right.
+    #[allow(dead_code)]
     fn empty(symbol: Symbol<'a>) -> Self {
         Production {
             left: symbol,
@@ -97,7 +98,8 @@ impl<'a> Grammar<'a> {
     ///
     /// A `Result` containing the parsed `Grammar` on success, or a `ParseGrammarError`
     /// on failure.
-    fn from_str(s: &'a str) -> Result<Self, ParseGrammarError> {
+    #[allow(dead_code)]
+    pub fn from_str(s: &'a str) -> Result<Self, ParseGrammarError> {
         let mut productions: Vec<Production> = Vec::new();
         let mut terminals: BTreeSet<Symbol> = BTreeSet::new();
 
@@ -131,8 +133,7 @@ impl<'a> Grammar<'a> {
         let non_terminals: Result<Vec<_>, _> = left
             .iter()
             .map(|s| {
-                s.trim()
-                    .split_whitespace()
+                s.split_whitespace()
                     .next()
                     .ok_or(ParseGrammarError::InvalidFormat)
             })
@@ -146,7 +147,7 @@ impl<'a> Grammar<'a> {
 
         for (nt, right_part) in non_terminal_chars.iter().zip(right) {
             let alternatives = right_part.trim().split("|");
-            let left = Symbol::NonTerminal(*nt);
+            let left = Symbol::NonTerminal(nt);
             non_terminals.insert(left);
 
             for alternative in alternatives {
@@ -191,16 +192,17 @@ impl<'a> Grammar<'a> {
     ///
     /// A `BTreeMap` where keys are `Symbol`s and values are `BTreeSet`s of
     /// `Symbol`s representing their FIRST sets.
-    fn get_first(&self) -> BTreeMap<Symbol, BTreeSet<Symbol>> {
+    #[allow(dead_code)]
+    pub fn get_first(&self) -> BTreeMap<Symbol<'_>, BTreeSet<Symbol<'_>>> {
         let mut curr_map = BTreeMap::new();
 
         // Initialize FIRST sets for terminals and non-terminals.
         for s in &self.terminals {
-            curr_map.insert(s.clone(), BTreeSet::from([*s]));
+            curr_map.insert(*s, BTreeSet::from([*s]));
         }
 
         for s in &self.non_terminals {
-            curr_map.insert(s.clone(), BTreeSet::new());
+            curr_map.insert(*s, BTreeSet::new());
         }
 
         // Loop while current map is different to next map
@@ -249,15 +251,16 @@ impl<'a> Grammar<'a> {
     ///
     /// A `BTreeMap` where keys are non-terminal `Symbol`s and values are
     /// `BTreeSet`s of `Symbol`s representing their FOLLOW sets.
-    fn get_follow(&self) -> BTreeMap<Symbol, BTreeSet<Symbol>> {
+    #[allow(dead_code)]
+    pub fn get_follow(&self) -> BTreeMap<Symbol<'_>, BTreeSet<Symbol<'_>>> {
         let mut curr_map = BTreeMap::new();
 
         // Initialize FOLLOW sets. All start empty except for the initial symbol.
         for s in &self.non_terminals {
             if s == &self.start {
-                curr_map.insert(s.clone(), BTreeSet::from([Symbol::End]));
+                curr_map.insert(*s, BTreeSet::from([Symbol::End]));
             } else {
-                curr_map.insert(s.clone(), BTreeSet::new());
+                curr_map.insert(*s, BTreeSet::new());
             }
         }
 
@@ -311,7 +314,7 @@ impl<'a> Grammar<'a> {
 mod tests {
     use std::collections::BTreeSet;
 
-    use crate::static_analizer::grammar::{Grammar, Symbol};
+    use crate::static_analyzer::grammar::{Grammar, Symbol};
 
     #[test]
     fn parse_grammar() {
@@ -341,6 +344,7 @@ mod tests {
 
         let parsed_grammar = Grammar::from_str(grammar).unwrap();
         let first_sets = parsed_grammar.get_first();
+        #[allow(non_snake_case)]
         let first_S = first_sets.get(&Symbol::NonTerminal("S")).unwrap();
 
         assert_eq!(
@@ -355,6 +359,7 @@ mod tests {
 
         let parsed_grammar = Grammar::from_str(grammar).unwrap();
         let follow_sets = parsed_grammar.get_follow();
+        #[allow(non_snake_case)]
         let follow_S = follow_sets.get(&Symbol::NonTerminal("S")).unwrap();
 
         assert!(follow_S.contains(&Symbol::End))
@@ -366,6 +371,7 @@ mod tests {
 
         let parsed_grammar = Grammar::from_str(grammar).unwrap();
         let first_sets = parsed_grammar.get_first();
+        #[allow(non_snake_case)]
         let first_S = first_sets.get(&Symbol::NonTerminal("S")).unwrap();
 
         assert_eq!(
@@ -382,7 +388,9 @@ B -> b";
 
         let parsed_grammar = Grammar::from_str(grammar).unwrap();
         let follow_sets = parsed_grammar.get_follow();
+        #[allow(non_snake_case)]
         let follow_A = follow_sets.get(&Symbol::NonTerminal("A")).unwrap();
+        #[allow(non_snake_case)]
         let follow_B = follow_sets.get(&Symbol::NonTerminal("B")).unwrap();
 
         assert!(follow_A.contains(&Symbol::Terminal("b")));
@@ -409,7 +417,6 @@ B -> b";
             factor      -> ( expr ) | ID | NUM";
 
         let parsed_grammar = Grammar::from_str(grammar).unwrap();
-        let first_sets = parsed_grammar.get_first();
         let follow_sets = parsed_grammar.get_follow();
 
         let follow_relop = follow_sets.get(&Symbol::NonTerminal("relop")).unwrap();
