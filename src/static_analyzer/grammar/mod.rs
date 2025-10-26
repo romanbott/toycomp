@@ -1,10 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::static_analyzer::lr_parser::{LR1Automaton, LR1AutomatonState, LR1Item};
+
 /// Represents a symbol in a formal grammar.
 ///
 /// Symbols can be either a `Terminal`, a `NonTerminal`, or the special `End`
 /// symbol which signifies the end of the input stream.
-#[derive(Debug, PartialEq, Eq, Clone, Copy, PartialOrd, Ord)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, PartialOrd, Ord, Hash)]
 pub enum Symbol<'a> {
     /// A terminal symbol, e.g., 'a', 'b', '+'.
     Terminal(&'a str),
@@ -12,6 +14,8 @@ pub enum Symbol<'a> {
     NonTerminal(&'a str),
     /// The end-of-input marker.
     End,
+    Start,
+    Epsilon,
 }
 
 impl Symbol<'_> {
@@ -29,12 +33,12 @@ impl Symbol<'_> {
 ///
 /// A production rule consists of a `left` non-terminal symbol and a `right`
 /// sequence of symbols.
-#[derive(Debug, PartialEq)]
-struct Production<'a> {
+#[derive(Debug, PartialEq, Eq, Hash, Ord, PartialOrd, Clone)]
+pub struct Production<'a> {
     /// The non-terminal symbol on the left side of the production.
-    left: Symbol<'a>,
+    pub left: Symbol<'a>,
     /// The sequence of symbols on the right side of the production.
-    right: Vec<Symbol<'a>>,
+    pub right: Vec<Symbol<'a>>,
 }
 
 impl<'a> Production<'a> {
@@ -51,7 +55,7 @@ impl<'a> Production<'a> {
     fn empty(symbol: Symbol<'a>) -> Self {
         Production {
             left: symbol,
-            right: vec![Symbol::Terminal("ε")],
+            right: vec![Symbol::Epsilon],
         }
     }
 }
@@ -61,13 +65,13 @@ impl<'a> Production<'a> {
 /// A grammar is defined by its set of non-terminals, terminals, production rules,
 /// and a designated start symbol.
 #[derive(Debug)]
-struct Grammar<'a> {
+pub struct Grammar<'a> {
     /// The set of all non-terminal symbols in the grammar.
     non_terminals: BTreeSet<Symbol<'a>>,
     /// The set of all terminal symbols in the grammar.
     terminals: BTreeSet<Symbol<'a>>,
     /// A list of all production rules.
-    productions: Vec<Production<'a>>,
+    pub productions: Vec<Production<'a>>,
     /// The starting non-terminal symbol.
     start: Symbol<'a>,
 }
@@ -151,8 +155,16 @@ impl<'a> Grammar<'a> {
             non_terminals.insert(left);
 
             for alternative in alternatives {
-                if alternative.trim().contains('ε') & (alternative.trim() != "ε") {
-                    return Err(ParseGrammarError::InvalidAlternative);
+                // if alternative.trim().contains('ε') & (alternative.trim() != "ε") {
+                //     return Err(ParseGrammarError::InvalidAlternative);
+                // }
+                if alternative.trim().is_empty() {
+                    productions.push(Production {
+                        left,
+                        right: vec![Symbol::Epsilon],
+                    });
+                    terminals.insert(Symbol::Epsilon);
+                    continue;
                 }
 
                 let prod_right = alternative
@@ -201,6 +213,9 @@ impl<'a> Grammar<'a> {
             curr_map.insert(*s, BTreeSet::from([*s]));
         }
 
+        // Handle end symbol
+        curr_map.insert(Symbol::End, BTreeSet::from([Symbol::End]));
+
         for s in &self.non_terminals {
             curr_map.insert(*s, BTreeSet::new());
         }
@@ -218,7 +233,7 @@ impl<'a> Grammar<'a> {
                 //  For each symbol Xi in the right-hand side:
                 for symbol in &prod.right {
                     let mut first_s = curr_map.get(symbol).unwrap().clone();
-                    has_epsilon &= first_s.remove(&Symbol::Terminal("ε"));
+                    has_epsilon &= first_s.remove(&Symbol::Epsilon);
 
                     //  Add FIRST(Xi) - {ε} to FIRST(A)
                     first_left.append(&mut first_s);
@@ -231,7 +246,7 @@ impl<'a> Grammar<'a> {
 
                 // If ε is in FIRST(Xi) for all i, add ε to FIRST(A)
                 if has_epsilon {
-                    first_left.insert(Symbol::Terminal("ε"));
+                    first_left.insert(Symbol::Epsilon);
                 }
             }
 
@@ -240,6 +255,26 @@ impl<'a> Grammar<'a> {
             }
             curr_map = next_map
         }
+    }
+
+    pub fn get_first_sentencial_form(&self, form: Vec<Symbol>) -> BTreeSet<Symbol<'_>> {
+        let first_map = self.get_first();
+
+        let mut has_epsilon = false;
+
+        let mut first = BTreeSet::new();
+        for symbol in &form {
+            let mut first_s = first_map.get(symbol).unwrap().clone();
+            has_epsilon &= first_s.remove(&Symbol::Epsilon);
+
+            first.append(&mut first_s);
+
+            if !has_epsilon {
+                break;
+            }
+        }
+
+        first
     }
 
     /// Computes the FOLLOW set for each non-terminal in the grammar.
@@ -284,7 +319,7 @@ impl<'a> Grammar<'a> {
                         // For each symbol Xj after Xi (i < j <= n):
                         for element in rest.iter() {
                             let mut first_of_element = first_sets.get(element).unwrap().clone();
-                            has_epsilon &= first_of_element.remove(&Symbol::Terminal("ε"));
+                            has_epsilon &= first_of_element.remove(&Symbol::Epsilon);
                             // Add FIRST(Xj) - {ε} to FOLLOW(Xi)
                             follow_symbol.append(&mut first_of_element);
                             // If ε is'nt in FIRST(Xj), break
@@ -308,17 +343,116 @@ impl<'a> Grammar<'a> {
             curr_map = next_map
         }
     }
+
+    fn get_productions_of_nt(&self, symbol: &Symbol) -> BTreeSet<&Production> {
+        self.productions
+            .iter()
+            .filter(|p| p.left == *symbol)
+            .collect()
+    }
+
+    pub fn lr1_closure<'b>(&'a self, item: &'b LR1Item<'a>) -> LR1AutomatonState<'a> {
+        let mut worklist = BTreeSet::from_iter([item.clone()]);
+        let mut items = BTreeSet::new();
+
+        while let Some(item) = worklist.pop_last() {
+            let new_look_aheads = self.get_first_sentencial_form(dbg!(item.get_remaining()));
+            dbg!(&new_look_aheads);
+
+            if let Some(pointed) = item.get_pointed()
+                && pointed.is_non_terminal()
+            {
+                for prod in self.get_productions_of_nt(pointed) {
+                    for symbol in &new_look_aheads {
+                        let new_item = LR1Item::from_prod_and_la(prod, symbol.clone());
+
+                        if !items.contains(&new_item) {
+                            worklist.insert(new_item);
+                        }
+                    }
+                }
+            }
+
+            items.insert(item);
+        }
+
+        LR1AutomatonState(items)
+    }
+
+    pub fn goto<'b>(
+        &'a self,
+        state: &'b LR1AutomatonState<'a>,
+        symbol: &Symbol<'a>,
+    ) -> LR1AutomatonState<'a> {
+        let mut new_state = BTreeSet::new();
+
+        for item in &state.0 {
+            if let Some(shifted) = item.shift(symbol) {
+                let mut closure = self.lr1_closure(&shifted).0;
+
+                new_state.append(&mut closure);
+            }
+        }
+
+        LR1AutomatonState(new_state)
+    }
+
+    pub fn get_lr1_automaton(&'a self) -> LR1Automaton<'a> {
+        let initial_item = LR1Item::from_prod_and_la(&self.productions[0], Symbol::End);
+
+        let mut worklist = BTreeSet::from([self.lr1_closure(&initial_item)]);
+
+        let mut states = BTreeSet::new();
+
+        while let Some(state) = worklist.pop_first() {
+            if state.0.is_empty() {
+                continue;
+            }
+
+            states.insert(state.clone());
+
+            for symbol in self.terminals.union(&self.non_terminals) {
+                let new_state = self.goto(&state, symbol);
+
+                if !states.contains(&new_state) {
+                    worklist.insert(new_state.clone());
+                }
+            }
+        }
+
+        LR1Automaton(states)
+    }
+
+    pub fn augment(&self) -> Grammar {
+        let mut augmented_productions = vec![Production {
+            left: Symbol::Start,
+            right: vec![self.productions[0].left],
+        }];
+        augmented_productions.append(&mut self.productions.clone());
+        let mut augmented_non_terminals = self.non_terminals.clone();
+        augmented_non_terminals.insert(Symbol::Start);
+
+        Grammar {
+            non_terminals: augmented_non_terminals,
+            terminals: self.terminals.clone(),
+            productions: augmented_productions,
+            start: Symbol::Start,
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
 
-    use crate::static_analyzer::grammar::{Grammar, Symbol};
+    use crate::static_analyzer::{
+        grammar::{Grammar, Production, Symbol},
+        lr_parser::{LR1AutomatonState, LR1Item},
+    };
 
     #[test]
     fn parse_grammar() {
-        let grammar = r#"S -> s|ε
+        let grammar = r#"S -> s|
         T -> a c|b"#;
 
         let parsed_grammar = Grammar::from_str(grammar);
@@ -333,7 +467,7 @@ mod tests {
                 Symbol::Terminal("a"),
                 Symbol::Terminal("b"),
                 Symbol::Terminal("c"),
-                Symbol::Terminal("ε"),
+                Symbol::Epsilon,
             ])
         )
     }
