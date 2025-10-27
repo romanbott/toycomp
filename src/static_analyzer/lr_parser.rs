@@ -1,13 +1,16 @@
 use std::collections::BTreeSet;
 use std::fmt::Debug;
 
-use crate::static_analyzer::grammar::{Production, Symbol};
+use crate::static_analyzer::{
+    grammar::{Production, Symbol},
+    lalr::Core,
+};
 
 #[derive(PartialEq, Eq, Hash, Ord, PartialOrd, Clone)]
 pub struct LR1Item<'a> {
-    prod: Production<'a>,
-    dot: usize,
-    look_ahead: Symbol<'a>,
+    pub prod: Production<'a>,
+    pub dot: usize,
+    pub look_ahead: Symbol<'a>,
 }
 
 impl<'a> Debug for LR1Item<'a> {
@@ -54,11 +57,19 @@ impl<'a> LR1Item<'a> {
         None
     }
 
+    pub fn reduce<'b>(&self, symbol: &'b Symbol<'a>) -> Option<Production<'a>> {
+        if &self.look_ahead == symbol && self.dot == self.prod.right.len() {
+            Some(self.prod.clone())
+        } else {
+            None
+        }
+    }
+
     pub fn get_remaining(&self) -> Vec<Symbol> {
         let mut remaining: Vec<_> = self
             .prod
             .right
-            .get(self.dot+1..)
+            .get(self.dot + 1..)
             .unwrap_or(&[])
             .iter()
             .map(Symbol::clone)
@@ -85,12 +96,22 @@ impl<'a> LR1Item<'a> {
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct LR1AutomatonState<'a>(pub BTreeSet<LR1Item<'a>>);
 
+impl LR1AutomatonState<'_> {
+    pub fn same_core(&self, other: &LR1AutomatonState) -> bool {
+        let self_core: Core = self.into();
+        self_core == other.into()
+    }
+}
+
 #[derive(Debug)]
-pub struct LR1Automaton<'a>(pub BTreeSet<LR1AutomatonState<'a>>);
+pub struct LR1Automaton<'a> {
+    pub states: BTreeSet<LR1AutomatonState<'a>>,
+    pub initial: LR1AutomatonState<'a>,
+}
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::BTreeSet};
+    use std::collections::BTreeSet;
 
     use crate::static_analyzer::{
         grammar::{Grammar, Symbol},
@@ -245,10 +266,7 @@ mod tests {
         ]));
 
         assert_eq!(expected_state, closure);
-
     }
-
-
 
     #[test]
     fn goto() {
@@ -294,6 +312,6 @@ mod tests {
 
         let automaton = augmented.get_lr1_automaton();
 
-        assert_eq!(10, automaton.0.len())
+        assert_eq!(10, automaton.states.len())
     }
 }

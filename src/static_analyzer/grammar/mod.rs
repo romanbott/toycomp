@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
 
 use crate::static_analyzer::lr_parser::{LR1Automaton, LR1AutomatonState, LR1Item};
 
@@ -16,6 +17,18 @@ pub enum Symbol<'a> {
     End,
     Start,
     Epsilon,
+}
+
+impl<'a> fmt::Display for Symbol<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Symbol::Terminal(s) => write!(f, "'{}'", s), // Terminals often enclosed in quotes
+            Symbol::NonTerminal(s) => write!(f, "<{}>", s), // Non-terminals often enclosed in angle brackets
+            Symbol::End => write!(f, "<EOF>"), // Common symbol for end-of-input
+            Symbol::Start => write!(f, "S'"), // Common symbol for the starting non-terminal
+            Symbol::Epsilon => write!(f, "<ε>"), // Greek letter epsilon for empty string/production
+        }
+    }
 }
 
 impl Symbol<'_> {
@@ -67,13 +80,13 @@ impl<'a> Production<'a> {
 #[derive(Debug)]
 pub struct Grammar<'a> {
     /// The set of all non-terminal symbols in the grammar.
-    non_terminals: BTreeSet<Symbol<'a>>,
+    pub non_terminals: BTreeSet<Symbol<'a>>,
     /// The set of all terminal symbols in the grammar.
-    terminals: BTreeSet<Symbol<'a>>,
+    pub terminals: BTreeSet<Symbol<'a>>,
     /// A list of all production rules.
     pub productions: Vec<Production<'a>>,
     /// The starting non-terminal symbol.
-    start: Symbol<'a>,
+    pub start: Symbol<'a>,
 }
 
 /// An enumeration of possible errors that can occur during grammar parsing.
@@ -356,8 +369,7 @@ impl<'a> Grammar<'a> {
         let mut items = BTreeSet::new();
 
         while let Some(item) = worklist.pop_last() {
-            let new_look_aheads = self.get_first_sentencial_form(dbg!(item.get_remaining()));
-            dbg!(&new_look_aheads);
+            let new_look_aheads = self.get_first_sentencial_form(item.get_remaining());
 
             if let Some(pointed) = item.get_pointed()
                 && pointed.is_non_terminal()
@@ -420,10 +432,13 @@ impl<'a> Grammar<'a> {
             }
         }
 
-        LR1Automaton(states)
+        LR1Automaton {
+            states,
+            initial: self.lr1_closure(&initial_item),
+        }
     }
 
-    pub fn augment(&self) -> Grammar {
+    pub fn augment<'b>(&'b self) -> Grammar<'a> {
         let mut augmented_productions = vec![Production {
             left: Symbol::Start,
             right: vec![self.productions[0].left],
