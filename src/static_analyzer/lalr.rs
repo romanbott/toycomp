@@ -1,7 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
-    vec,
     fmt::{Display, Formatter},
+    vec,
 };
 
 use crate::static_analyzer::{
@@ -44,16 +44,25 @@ impl<'a> Display for ParseError<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             ParseError::CantReduce(prod) => {
-                write!(f, "Parsing failed: Cannot reduce using production: {:?}", prod)
+                write!(
+                    f,
+                    "Parsing failed: Cannot reduce using production: {:?}",
+                    prod
+                )
             }
             ParseError::NotExpected((found_symbol, expected_symbols)) => {
                 // Format the Vec<Symbol<'a>> into a single string for display
-                let expected_str = expected_symbols.iter()
+                let expected_str = expected_symbols
+                    .iter()
                     .map(|sym| sym.to_string()) // Convert each Symbol to a String
-                    .collect::<Vec<String>>()    // Collect into a Vec<String>
-                    .join(", ");                 // Join with commas and spaces
+                    .collect::<Vec<String>>() // Collect into a Vec<String>
+                    .join(", "); // Join with commas and spaces
 
-                write!(f, "Found: {} while expecting: {}", found_symbol, expected_str)
+                write!(
+                    f,
+                    "Found: {} while expecting: {}",
+                    found_symbol, expected_str
+                )
             }
             ParseError::EndWhileParsing => {
                 write!(f, "Unexpected end of input while parsing.")
@@ -61,8 +70,6 @@ impl<'a> Display for ParseError<'a> {
         }
     }
 }
-
-
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 enum LALRAction<'a> {
@@ -258,29 +265,28 @@ mod tests {
         let lalr = LALRAutomaton::from_grammar(&augmented);
 
         let should_accept = vec![
-        vec![
-            Symbol::Terminal("b"),
-            Symbol::Terminal("d"),
-            Symbol::Terminal("b"),
-            Symbol::Terminal("d"),
-            Symbol::End,
-        ],
-        vec![
-            Symbol::Terminal("b"),
-            Symbol::Terminal("b"),
-            Symbol::Terminal("d"),
-            Symbol::Terminal("b"),
-            Symbol::Terminal("b"),
-            Symbol::Terminal("d"),
-            Symbol::End,
-        ],
+            vec![
+                Symbol::Terminal("b"),
+                Symbol::Terminal("d"),
+                Symbol::Terminal("b"),
+                Symbol::Terminal("d"),
+                Symbol::End,
+            ],
+            vec![
+                Symbol::Terminal("b"),
+                Symbol::Terminal("b"),
+                Symbol::Terminal("d"),
+                Symbol::Terminal("b"),
+                Symbol::Terminal("b"),
+                Symbol::Terminal("d"),
+                Symbol::End,
+            ],
         ];
 
         for input in should_accept {
-        assert!(lalr.parse(input).is_ok());
+            assert!(lalr.parse(input).is_ok());
         }
 
-
         let not_accepted = lalr.parse(vec![
             Symbol::Terminal("b"),
             Symbol::Terminal("d"),
@@ -292,7 +298,7 @@ mod tests {
 
         assert!(not_accepted.is_err());
         let error = not_accepted.unwrap_err();
-        assert_eq!(error.to_string(),"Found: 'b' while expecting: <EOF>");
+        assert_eq!(error.to_string(), "Found: 'b' while expecting: <EOF>");
 
         let not_accepted = lalr.parse(vec![
             Symbol::Terminal("b"),
@@ -304,6 +310,59 @@ mod tests {
 
         assert!(not_accepted.is_err());
         let error = not_accepted.unwrap_err();
-        assert_eq!(error.to_string(),"Found: <EOF> while expecting: 'b', 'd'");
+        assert_eq!(error.to_string(), "Found: <EOF> while expecting: 'b', 'd'");
+    }
+
+    #[test]
+    fn lalr_parse_adrian() {
+        let grammar = "S -> A A\nA -> a A | b";
+        let parsed_grammar = Grammar::from_str(grammar).unwrap();
+        let augmented = parsed_grammar.augment();
+
+        let lalr = LALRAutomaton::from_grammar(&augmented);
+        let should_accept = vec![
+            vec![
+                Symbol::Terminal("a"),
+                Symbol::Terminal("b"),
+                Symbol::Terminal("a"),
+                Symbol::Terminal("b"),
+                Symbol::End,
+            ],
+            vec![
+                Symbol::Terminal("a"),
+                Symbol::Terminal("a"),
+                Symbol::Terminal("a"),
+                Symbol::Terminal("b"),
+                Symbol::Terminal("a"),
+                Symbol::Terminal("b"),
+                Symbol::End,
+            ],
+        ];
+
+        for input in should_accept {
+            assert!(lalr.parse(input).is_ok());
+        }
+
+        let should_not_accept = vec![
+            vec![
+                Symbol::Terminal("a"),
+                Symbol::Terminal("a"),
+                Symbol::Terminal("b"),
+                Symbol::End,
+            ],
+            vec![
+                Symbol::Terminal("a"),
+                Symbol::Terminal("b"),
+                Symbol::Terminal("a"),
+                Symbol::Terminal("b"),
+                Symbol::Terminal("a"),
+                Symbol::Terminal("b"),
+                Symbol::End,
+            ],
+        ];
+
+        for input in should_not_accept {
+            assert!(lalr.parse(input).is_err());
+        }
     }
 }
