@@ -2,11 +2,13 @@ use std::{fmt, str::FromStr};
 
 use crate::automata::TaggedDFA;
 
+#[derive(Debug)]
 pub struct Pattern {
     pub regex: String,
     pub tag: String,
 }
 
+#[derive(Debug)]
 pub struct Lexer {
     pub patterns: Vec<Pattern>,
 }
@@ -17,8 +19,27 @@ pub struct Token {
     pub value: String,
 }
 
+#[derive(Debug)]
+pub struct LexingError {
+    pub position: usize,
+    pub parsed_tokens: Vec<Token>,
+    pub context: String,
+}
+
+impl fmt::Display for LexingError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Lexing error at position {}. Context: \"{}\". Parsed tokens: {:?}",
+            self.position, self.context, self.parsed_tokens
+        )
+    }
+}
+
+impl std::error::Error for LexingError {}
+
 impl Lexer {
-    pub fn consume(&self, input: &str) -> Vec<Token> {
+    pub fn consume(&self, input: &str) -> Result<Vec<Token>, LexingError> {
         let dfa: TaggedDFA = self.into();
         let min = dfa.minimize();
 
@@ -39,11 +60,22 @@ impl Lexer {
                 scan += 1;
             }
 
+            // if last_lenght == 0 {
+            //     panic!(
+            //         "Lexing error at position {}\n.Parsed tokens: {:?}",
+            //         token_begin, tokens
+            //     );
+            // }
+
             if last_lenght == 0 {
-                panic!(
-                    "Lexing error at position {}\n.Parsed tokens: {:?}",
-                    token_begin, tokens
-                );
+                let end = (token_begin + 10).min(len); // Take up to 10 chars as context
+                let context = input[token_begin..end].to_string();
+
+                return Err(LexingError {
+                    position: token_begin,
+                    parsed_tokens: tokens, // Return successfully parsed tokens up to this point
+                    context: context,
+                });
             }
 
             tokens.push(Token {
@@ -55,7 +87,7 @@ impl Lexer {
             scan = token_begin;
         }
 
-        tokens
+        Ok(tokens)
     }
 }
 
@@ -99,15 +131,12 @@ impl FromStr for Lexer {
             }
 
             // Split the line by the " -> " separator
-            let parts: Vec<&str> = trimmed_line.split("->").collect();
+            let parts = trimmed_line
+                .split_once("->")
+                .ok_or(LexerParseError::InvalidFormat(trimmed_line.to_string()))?;
 
-            if parts.len() != 2 {
-                // Return an error if the line doesn't split correctly
-                return Err(LexerParseError::InvalidFormat(trimmed_line.to_string()));
-            }
-
-            let tag = parts[0].trim().to_string();
-            let regex = parts[1].trim().to_string();
+            let tag = parts.0.trim().to_string();
+            let regex = parts.1.trim().to_string();
 
             // Basic validation: ensure both parts aren't empty after trimming
             if tag.is_empty() || regex.is_empty() {
@@ -151,6 +180,10 @@ mod tests {
 
         let tokens = lex.consume("if myvar then else");
 
+        assert!(tokens.is_ok());
+
+        let tokens = tokens.unwrap();
+
         let expected_tokens = vec![
             Token {
                 tag: "keyword".to_owned(),
@@ -181,8 +214,6 @@ mod tests {
                 value: "else".to_owned(),
             },
         ];
-
-        dbg!(&tokens);
 
         assert_eq!(expected_tokens, tokens);
     }
