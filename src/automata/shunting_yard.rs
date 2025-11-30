@@ -72,6 +72,11 @@ fn is_operator(input: &char) -> bool {
 fn is_unary(input: &char) -> bool {
     UNARY_OPERATORS.contains(input)
 }
+///
+/// Checks if a character is escapable, like (, ), *, +, ?, |
+fn is_escapable(input: &char) -> bool {
+    is_operator(input) || is_unary(input)
+}
 
 /// Inserts explicit concatenation operators into the regular expression.
 ///
@@ -82,7 +87,12 @@ fn explicit_concat(input: &str) -> Vec<RegexToken> {
     let mut output: Vec<RegexToken> = Vec::new();
 
     while let Some(current_char) = chars.next() {
-        output.push((&current_char).into());
+        // Handle escape sequences
+        if (current_char == '\\') && chars.peek().map(is_escapable).unwrap_or(false) {
+            output.push(RegexToken::Character(chars.next().unwrap()));
+        } else {
+            output.push((&current_char).into());
+        }
 
         // TODO; refactor
         if let Some(&next_char) = chars.peek() {
@@ -186,7 +196,6 @@ impl ShuntingYard {
         }
         while let Some(operator) = self.operator_stack.pop() {
             self.output.push_back(operator);
-
         }
     }
 }
@@ -281,6 +290,26 @@ mod tests {
             RegexToken::Kleene,
             RegexToken::Concat,
             RegexToken::Character('b'),
+        ];
+        let result = explicit_concat(input);
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_escape() {
+        let input = r"a\)b\*c\+";
+        let expected = vec![
+            RegexToken::Character('a'),
+            RegexToken::Concat,
+            RegexToken::Character(')'),
+            RegexToken::Concat,
+            RegexToken::Character('b'),
+            RegexToken::Concat,
+            RegexToken::Character('*'),
+            RegexToken::Concat,
+            RegexToken::Character('c'),
+            RegexToken::Concat,
+            RegexToken::Character('+'),
         ];
         let result = explicit_concat(input);
         assert_eq!(result, expected);
