@@ -4,9 +4,13 @@ use std::{
     vec,
 };
 
-use crate::static_analyzer::{
-    grammar::{self, Grammar, Production, Symbol},
-    lr_parser::{LR1AutomatonState, LR1Item},
+use crate::{
+    lexer::Token,
+    static_analyzer::{
+        grammar::{Grammar, Production, Symbol},
+        lr_parser::{LR1AutomatonState, LR1Item},
+        symbol_stack::{SymbolStack, SymbolStackError},
+    },
 };
 
 #[derive(PartialEq, Eq, Hash, Ord, PartialOrd, Clone, Debug)]
@@ -34,13 +38,25 @@ impl<'a, 'b> From<&'b LR1Item<'a>> for LALR1Item<'a> {
 }
 
 #[derive(Debug)]
-enum ParseError<'a> {
-    CantReduce(Production<'a>),
-    NotExpected((Symbol<'a>, Vec<Symbol<'a>>)),
+pub enum ParseError {
+    CantReduce(String),
+    NotExpected((String, Vec<String>)),
     EndWhileParsing,
+    StackError(SymbolStackError),
 }
 
-impl<'a> Display for ParseError<'a> {
+impl From<SymbolStackError> for ParseError {
+    fn from(value: SymbolStackError) -> Self {
+        ParseError::StackError(value)
+    }
+}
+
+struct ConcreteTree<'a> {
+    node: &'a str,
+    children: Vec<ConcreteTree<'a>>,
+}
+
+impl Display for ParseError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             ParseError::CantReduce(prod) => {
@@ -67,6 +83,7 @@ impl<'a> Display for ParseError<'a> {
             ParseError::EndWhileParsing => {
                 write!(f, "Unexpected end of input while parsing.")
             }
+            ParseError::StackError(symbol_stack_error) => todo!(),
         }
     }
 }
@@ -77,6 +94,15 @@ enum LALRAction<'a> {
     Reduce(Production<'a>),
     Accept,
     Goto(usize),
+}
+
+impl<'a> LALRAction<'a> {
+    pub fn goto(&self) -> Option<usize> {
+        match self {
+            LALRAction::Goto(new_state) => Some(*new_state),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -186,7 +212,7 @@ impl<'a> LALRAutomaton<'a> {
         }
     }
 
-    fn parse(&self, mut input: Vec<Symbol<'a>>) -> Result<(), ParseError<'a>> {
+    fn accept(&self, mut input: Vec<Symbol<'a>>) -> Result<(), ParseError> {
         let mut state_stack = vec![self.initial_state];
         let mut stack = vec![];
 
@@ -210,7 +236,7 @@ impl<'a> LALRAutomaton<'a> {
                         input.push(production.left);
                         state_stack.truncate(state_stack.len() - to_match);
                     } else {
-                        return Err(ParseError::CantReduce(production.clone()));
+                        return Err(ParseError::CantReduce(format!("{:?}", production)));
                     }
                 }
                 Some(LALRAction::Accept) => return Ok(()),
@@ -223,11 +249,71 @@ impl<'a> LALRAutomaton<'a> {
                         .terminals
                         .iter()
                         .filter(|s| self.table.get(&(*current_state, **s)).is_some())
-                        .map(Symbol::clone)
+                        .map(Symbol::to_string)
                         .collect();
 
                     return Err(ParseError::NotExpected((
-                        input_symbol.clone(),
+                        input_symbol.to_string(),
+                        expected_symbols,
+                    )));
+                }
+            }
+        }
+        Err(ParseError::EndWhileParsing)
+    }
+
+    fn parse<'b, CT>(
+        &self,
+        input: &mut Vec<Token>,
+        mut symbol_stack: impl SymbolStack<CT>,
+    ) -> Result<CT, ParseError> {
+        let mut state_stack = vec![self.initial_state];
+
+        input.push(Token {
+            tag: "<END>".to_string(),
+            value: "".to_string(),
+        });
+
+        input.reverse();
+
+        while let Some(token) = input.last() {
+            let current_state = state_stack.last().expect("Empty state stack!");
+            let input_symbol: Symbol = token.into();
+
+            let action = self.table.get(&(*current_state, input_symbol));
+
+            match action {
+                Some(LALRAction::Shift(new_state)) => {
+                    symbol_stack.shift(token)?;
+                    state_stack.push(*new_state);
+                    input.pop();
+                }
+                Some(LALRAction::Reduce(production)) => {
+                    let to_match = production.right.len();
+
+                    symbol_stack.reduce(production)?;
+                    state_stack.truncate(state_stack.len() - to_match);
+
+                    let current_state = state_stack.last().expect("Empty state stack!");
+                    let action = self.table.get(&(*current_state, production.left)).unwrap();
+                    state_stack.push(action.goto().unwrap());
+                }
+                Some(LALRAction::Accept) => return Ok(symbol_stack.to_tree()),
+                Some(LALRAction::Goto(new_state)) => {
+                    symbol_stack.shift(token)?;
+                    state_stack.push(*new_state);
+                    input.pop();
+                }
+                None => {
+                    let expected_symbols = self
+                        .terminals
+                        .iter()
+                        .filter(|s| self.table.get(&(*current_state, **s)).is_some())
+                        .map(Symbol::to_string)
+                        .collect();
+
+                    return Err(ParseError::NotExpected((
+                        input_symbol.to_string(),
                         expected_symbols,
                     )));
                 }
@@ -239,9 +325,13 @@ impl<'a> LALRAutomaton<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::static_analyzer::{
-        grammar::{Grammar, Symbol},
-        lalr::LALRAutomaton,
+    use crate::{
+        lexer::Token,
+        static_analyzer::{
+            grammar::{Grammar, Symbol},
+            lalr::LALRAutomaton,
+            symbol_stack::{BasicStack, SymbolStack},
+        },
     };
 
     #[test]
@@ -257,7 +347,7 @@ mod tests {
     }
 
     #[test]
-    fn lalr_parse() {
+    fn lalr_accept() {
         let grammar = "S -> B B\nB -> b B|d";
         let parsed_grammar = Grammar::from_str(grammar).unwrap();
         let augmented = parsed_grammar.augment();
@@ -284,10 +374,10 @@ mod tests {
         ];
 
         for input in should_accept {
-            assert!(lalr.parse(input).is_ok());
+            assert!(lalr.accept(input).is_ok());
         }
 
-        let not_accepted = lalr.parse(vec![
+        let not_accepted = lalr.accept(vec![
             Symbol::Terminal("b"),
             Symbol::Terminal("d"),
             Symbol::Terminal("b"),
@@ -300,7 +390,7 @@ mod tests {
         let error = not_accepted.unwrap_err();
         assert_eq!(error.to_string(), "Found: 'b' while expecting: <EOF>");
 
-        let not_accepted = lalr.parse(vec![
+        let not_accepted = lalr.accept(vec![
             Symbol::Terminal("b"),
             Symbol::Terminal("d"),
             Symbol::Terminal("b"),
@@ -340,7 +430,7 @@ mod tests {
         ];
 
         for input in should_accept {
-            assert!(lalr.parse(input).is_ok());
+            assert!(lalr.accept(input).is_ok());
         }
 
         let should_not_accept = vec![
@@ -362,7 +452,67 @@ mod tests {
         ];
 
         for input in should_not_accept {
-            assert!(lalr.parse(input).is_err());
+            assert!(lalr.accept(input).is_err());
         }
+    }
+
+    #[test]
+    fn lalr_parse() {
+        let grammar = "S -> B B\nB -> b B|d";
+        let parsed_grammar = Grammar::from_str(grammar).unwrap();
+        let augmented = parsed_grammar.augment();
+
+        let lalr = LALRAutomaton::from_grammar(&augmented);
+
+        let mut should_accept = vec![vec![
+            Token {
+                tag: "b".to_string(),
+                value: "".to_string(),
+            },
+            Token {
+                tag: "d".to_string(),
+                value: "".to_string(),
+            },
+            Token {
+                tag: "b".to_string(),
+                value: "".to_string(),
+            },
+            Token {
+                tag: "d".to_string(),
+                value: "".to_string(),
+            },
+        ]];
+
+        for mut input in should_accept {
+            let basic_stack = BasicStack::new();
+            let res = lalr.parse(&mut input, basic_stack);
+            dbg!(&res);
+            assert!(res.is_ok());
+        }
+
+        let not_accepted = lalr.accept(vec![
+            Symbol::Terminal("b"),
+            Symbol::Terminal("d"),
+            Symbol::Terminal("b"),
+            Symbol::Terminal("d"),
+            Symbol::Terminal("b"),
+            Symbol::End,
+        ]);
+
+        assert!(not_accepted.is_err());
+        let error = not_accepted.unwrap_err();
+        assert_eq!(error.to_string(), "Found: 'b' while expecting: <EOF>");
+
+        let not_accepted = lalr.accept(vec![
+            Symbol::Terminal("b"),
+            Symbol::Terminal("d"),
+            Symbol::Terminal("b"),
+            Symbol::Terminal("b"),
+            Symbol::End,
+        ]);
+
+        assert!(not_accepted.is_err());
+        let error = not_accepted.unwrap_err();
+        assert_eq!(error.to_string(), "Found: <EOF> while expecting: 'b', 'd'");
     }
 }

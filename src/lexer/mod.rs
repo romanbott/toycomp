@@ -11,8 +11,8 @@ pub struct Lexer {
 
 #[derive(Debug, PartialEq)]
 pub struct Token {
-    tag: String,
-    value: String,
+    pub tag: String,
+    pub value: String,
 }
 
 impl Lexer {

@@ -1,3 +1,4 @@
 mod grammar;
-mod lr_parser;
 mod lalr;
+mod lr_parser;
+mod symbol_stack;

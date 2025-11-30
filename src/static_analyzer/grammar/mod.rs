@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
+use crate::lexer::Token;
 use crate::static_analyzer::lr_parser::{LR1Automaton, LR1AutomatonState, LR1Item};
 
 /// Represents a symbol in a formal grammar.
@@ -19,12 +20,21 @@ pub enum Symbol<'a> {
     Epsilon,
 }
 
+impl<'a> From<&'a Token> for Symbol<'a> {
+    fn from(value: &'a Token) -> Self {
+        if value.tag == "<END>" {
+            return Symbol::End;
+        }
+        Symbol::Terminal(value.tag.as_str())
+    }
+}
+
 impl<'a> fmt::Display for Symbol<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Symbol::Terminal(s) => write!(f, "'{}'", s), // Terminals often enclosed in quotes
             Symbol::NonTerminal(s) => write!(f, "<{}>", s), // Non-terminals often enclosed in angle brackets
-            Symbol::End => write!(f, "<EOF>"), // Common symbol for end-of-input
+            Symbol::End => write!(f, "<EOF>"),              // Common symbol for end-of-input
             Symbol::Start => write!(f, "S'"), // Common symbol for the starting non-terminal
             Symbol::Epsilon => write!(f, "<ε>"), // Greek letter epsilon for empty string/production
         }
