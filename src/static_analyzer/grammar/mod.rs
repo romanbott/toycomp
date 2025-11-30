@@ -106,6 +106,10 @@ pub enum ParseGrammarError {
     InvalidAlternative,
     /// Indicates an invalid line format (e.g., missing '->').
     InvalidFormat,
+    /// Indicates that the left side of a production couldnt be parsed.
+    InvalidLeftSide,
+    /// Indicates that some production couldnt be split in two parts
+    LeftRightSplit(String),
     /// Indicates that the input string was empty and contained no productions.
     NoProductions,
 }
@@ -145,12 +149,19 @@ impl<'a> Grammar<'a> {
             .trim();
 
         let res: Result<Vec<_>, _> = lines
+            .filter(|line| {
+                let trimmed = line.trim();
+                let is_not_empty = !trimmed.is_empty();
+                let is_not_comment = !trimmed.starts_with("//");
+
+                is_not_empty && is_not_comment
+            })
             .map(|line| {
                 let split: Vec<&str> = line.split("->").collect();
                 if split.len() == 2 {
                     Ok((split[0], split[1]))
                 } else {
-                    Err(ParseGrammarError::InvalidFormat)
+                    Err(ParseGrammarError::LeftRightSplit(line.to_string()))
                 }
             })
             .collect();
@@ -162,7 +173,7 @@ impl<'a> Grammar<'a> {
             .map(|s| {
                 s.split_whitespace()
                     .next()
-                    .ok_or(ParseGrammarError::InvalidFormat)
+                    .ok_or(ParseGrammarError::InvalidLeftSide)
             })
             .collect();
 

@@ -41,6 +41,7 @@ impl<'a, 'b> From<&'b LR1Item<'a>> for LALR1Item<'a> {
 pub enum ParseError {
     CantReduce(String),
     NotExpected((String, Vec<String>)),
+    NotExpectedVerbose((Token, Vec<String>)),
     EndWhileParsing,
     StackError(SymbolStackError),
 }
@@ -80,6 +81,20 @@ impl Display for ParseError {
                     found_symbol, expected_str
                 )
             }
+            ParseError::NotExpectedVerbose((found_symbol, expected_symbols)) => {
+                // Format the Vec<Symbol<'a>> into a single string for display
+                let expected_str = expected_symbols
+                    .iter()
+                    .map(|sym| sym.to_string()) // Convert each Symbol to a String
+                    .collect::<Vec<String>>() // Collect into a Vec<String>
+                    .join(", "); // Join with commas and spaces
+
+                write!(
+                    f,
+                    "Found: {:?} while expecting: {}",
+                    found_symbol, expected_str
+                )
+            }
             ParseError::EndWhileParsing => {
                 write!(f, "Unexpected end of input while parsing.")
             }
@@ -106,14 +121,14 @@ impl<'a> LALRAction<'a> {
 }
 
 #[derive(Debug)]
-struct LALRAutomaton<'a> {
+pub struct LALRAutomaton<'a> {
     table: HashMap<(usize, Symbol<'a>), LALRAction<'a>>,
     initial_state: usize,
     terminals: Vec<Symbol<'a>>,
 }
 
 impl<'a> LALRAutomaton<'a> {
-    fn from_grammar(grammar: &'a Grammar<'a>) -> LALRAutomaton<'a> {
+    pub fn from_grammar(grammar: &'a Grammar<'a>) -> LALRAutomaton<'a> {
         let lr_aut = grammar.get_lr1_automaton();
 
         let cores: BTreeSet<Core> = lr_aut.states.iter().map(|s| s.into()).collect();
@@ -200,6 +215,8 @@ impl<'a> LALRAutomaton<'a> {
 
         let accepting_state = grammar.lr1_closure(&accepting_item);
 
+        // dbg!(&state_to_core, &accepting_state);
+
         table.insert(
             (*state_to_core.get(&accepting_state).unwrap(), Symbol::End),
             LALRAction::Accept,
@@ -262,7 +279,7 @@ impl<'a> LALRAutomaton<'a> {
         Err(ParseError::EndWhileParsing)
     }
 
-    fn parse<'b, CT>(
+    pub fn parse<'b, CT>(
         &self,
         input: &mut Vec<Token>,
         mut symbol_stack: impl SymbolStack<CT>,
@@ -272,6 +289,8 @@ impl<'a> LALRAutomaton<'a> {
         input.push(Token {
             tag: "<END>".to_string(),
             value: "".to_string(),
+            // TODO: fix this position
+            position: (0, 0),
         });
 
         input.reverse();
@@ -312,8 +331,8 @@ impl<'a> LALRAutomaton<'a> {
                         .map(Symbol::to_string)
                         .collect();
 
-                    return Err(ParseError::NotExpected((
-                        input_symbol.to_string(),
+                    return Err(ParseError::NotExpectedVerbose((
+                        token.clone(),
                         expected_symbols,
                     )));
                 }
@@ -464,23 +483,11 @@ mod tests {
 
         let lalr = LALRAutomaton::from_grammar(&augmented);
 
-        let mut should_accept = vec![vec![
-            Token {
-                tag: "b".to_string(),
-                value: "".to_string(),
-            },
-            Token {
-                tag: "d".to_string(),
-                value: "".to_string(),
-            },
-            Token {
-                tag: "b".to_string(),
-                value: "".to_string(),
-            },
-            Token {
-                tag: "d".to_string(),
-                value: "".to_string(),
-            },
+        let mut should_accept: Vec<Vec<Token>> = vec![vec![
+            ("b", "").into(),
+            ("d", "").into(),
+            ("b", "").into(),
+            ("d", "").into(),
         ]];
 
         for mut input in should_accept {

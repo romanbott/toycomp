@@ -13,10 +13,21 @@ pub struct Lexer {
     pub patterns: Vec<Pattern>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Token {
     pub tag: String,
     pub value: String,
+    pub position: (usize, usize),
+}
+
+impl From<(&str, &str)> for Token {
+    fn from((tag, value): (&str, &str)) -> Self {
+        Token {
+            tag: tag.to_string(),
+            value: value.to_string(),
+            position: (0, 0),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -48,6 +59,8 @@ impl Lexer {
 
         let len = input.len();
         let mut tokens = Vec::new();
+        let mut current_line = 0;
+        let mut current_char = 0;
 
         while token_begin < len {
             let mut last_lenght = 0;
@@ -60,13 +73,6 @@ impl Lexer {
                 scan += 1;
             }
 
-            // if last_lenght == 0 {
-            //     panic!(
-            //         "Lexing error at position {}\n.Parsed tokens: {:?}",
-            //         token_begin, tokens
-            //     );
-            // }
-
             if last_lenght == 0 {
                 let end = (token_begin + 10).min(len); // Take up to 10 chars as context
                 let context = input[token_begin..end].to_string();
@@ -77,12 +83,18 @@ impl Lexer {
                     context: context,
                 });
             }
+            if &input.chars().nth(token_begin) == &Some('\n') {
+                current_line += 1;
+                current_char = 0
+            }
 
             tokens.push(Token {
                 tag: last_tag.to_owned(),
                 value: input[token_begin..(token_begin + last_lenght)].to_owned(),
+                position: (current_line, current_char),
             });
 
+            current_char += last_lenght;
             token_begin += last_lenght;
             scan = token_begin;
         }
@@ -184,35 +196,14 @@ mod tests {
 
         let tokens = tokens.unwrap();
 
-        let expected_tokens = vec![
-            Token {
-                tag: "keyword".to_owned(),
-                value: "if".to_owned(),
-            },
-            Token {
-                tag: "white_space".to_owned(),
-                value: " ".to_owned(),
-            },
-            Token {
-                tag: "identifier".to_owned(),
-                value: "myvar".to_owned(),
-            },
-            Token {
-                tag: "white_space".to_owned(),
-                value: " ".to_owned(),
-            },
-            Token {
-                tag: "keyword".to_owned(),
-                value: "then".to_owned(),
-            },
-            Token {
-                tag: "white_space".to_owned(),
-                value: " ".to_owned(),
-            },
-            Token {
-                tag: "keyword".to_owned(),
-                value: "else".to_owned(),
-            },
+        let expected_tokens: Vec<Token> = vec![
+            ("keyword", "if").into(),
+            ("white_space", " ").into(),
+            ("identifier", "myvar").into(),
+            ("white_space", " ").into(),
+            ("keyword", "then").into(),
+            ("white_space", " ").into(),
+            ("keyword", "else").into(),
         ];
 
         assert_eq!(expected_tokens, tokens);
