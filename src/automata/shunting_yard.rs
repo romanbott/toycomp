@@ -62,6 +62,7 @@ impl From<&char> for RegexToken {
 
 const OPERATORS: [char; 6] = ['*', '+', '?', '|', '(', ')'];
 const UNARY_OPERATORS: [char; 3] = ['*', '+', '?'];
+const WHITE_SPACE_ESC: [char; 3] = ['t', 'r', 'n'];
 
 /// Checks if a character is a regex operator.
 fn is_operator(input: &char) -> bool {
@@ -72,10 +73,15 @@ fn is_operator(input: &char) -> bool {
 fn is_unary(input: &char) -> bool {
     UNARY_OPERATORS.contains(input)
 }
-///
+
+/// Checks if a character is a escape code for whitespace
+fn is_white_space_esc(input: &char) -> bool {
+    WHITE_SPACE_ESC.contains(input)
+}
+
 /// Checks if a character is escapable, like (, ), *, +, ?, |
 fn is_escapable(input: &char) -> bool {
-    is_operator(input) || is_unary(input)
+    is_operator(input) || is_unary(input) || is_white_space_esc(input)
 }
 
 /// Inserts explicit concatenation operators into the regular expression.
@@ -89,7 +95,18 @@ fn explicit_concat(input: &str) -> Vec<RegexToken> {
     while let Some(current_char) = chars.next() {
         // Handle escape sequences
         if (current_char == '\\') && chars.peek().map(is_escapable).unwrap_or(false) {
-            output.push(RegexToken::Character(chars.next().unwrap()));
+            let escaped_char = chars.next().unwrap();
+            if is_white_space_esc(&escaped_char) {
+                let token = match escaped_char {
+                    'n' => RegexToken::Character('\n'),
+                    't' => RegexToken::Character('\t'),
+                    'r' => RegexToken::Character('\r'),
+                    _ => unreachable!("Only white spaces escape characters are: t n r"),
+                };
+                output.push(token);
+            } else {
+                output.push(RegexToken::Character(escaped_char));
+            }
         } else {
             output.push((&current_char).into());
         }
@@ -297,7 +314,7 @@ mod tests {
 
     #[test]
     fn test_escape() {
-        let input = r"a\)b\*c\+";
+        let input = r"a\)b\*c\+\n";
         let expected = vec![
             RegexToken::Character('a'),
             RegexToken::Concat,
@@ -310,6 +327,8 @@ mod tests {
             RegexToken::Character('c'),
             RegexToken::Concat,
             RegexToken::Character('+'),
+            RegexToken::Concat,
+            RegexToken::Character('\n'),
         ];
         let result = explicit_concat(input);
         assert_eq!(result, expected);
