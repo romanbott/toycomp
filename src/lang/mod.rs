@@ -5,59 +5,88 @@ use crate::{
 
 const GRAMMAR: &'static str = r#"
 Program -> Item Program | Item
-Item -> FunctionDefinition | Statement semi_colon
-Block -> left_brace Statements right_brace
-Literal -> integer_literal | float_literal
-FunctionDefinition -> fn identifier left_paren Parameters right_paren arrow type Block
-FunctionDefinition -> fn identifier left_paren right_paren arrow type Block
-Parameters -> Parameter comma Parameters | Parameter
-Parameter -> identifier colon type
-FunctionCall -> identifier left_paren Arguments right_paren
-Arguments -> Expression comma Arguments | Expression
-Statements -> Statement semi_colon Statements| Statement semi_colon
-Statement -> LetDeclaration | Assignment | ControlFlow | ReturnStatement | IfStatement | WhileLoop
-ReturnStatement -> return Expression
-LetDeclaration -> let identifier colon type equal Expression
-Assignment -> identifier equal Expression
-IfStatement -> if left_paren Expression right_paren Block | if left_paren Expression right_paren Block ElseClause
-ElseClause -> else Block
-WhileLoop -> while left_paren Expression right_paren Block
-Expression -> BooleanExpression | AdditiveExpression
-BooleanExpression -> AdditiveExpression comparison_op AdditiveExpression | Clause and BooleanExpression | Clause
-Clause -> BTerm or Clause | BTerm
-BTerm -> boolean_literal | left_paren BooleanExpression rightParen
-AdditiveExpression -> MultiplicativeExpression plus_minus AdditiveExpression  | MultiplicativeExpression
-MultiplicativeExpression -> PrimaryExpression time_div MultiplicativeExpression  | PrimaryExpression
-PrimaryExpression -> Literal | identifier | FunctionCall | left_paren Expression right_paren
-// PrimaryExpression -> Literal | identifier | FunctionCall
+
+Item -> FunctionDefinition | Statement SEMI_COLON
+
+Block -> LEFT_BRACE Statements RIGHT_BRACE
+
+Literal -> INTEGER_LITERAL | BOOLEAN_LITERAL | FLOAT_LITERAL
+
+FunctionDefinition -> FN IDENTIFIER LEFT_PAREN Parameters RIGHT_PAREN ARROW TYPE Block
+FunctionDefinition -> FN IDENTIFIER LEFT_PAREN RIGHT_PAREN ARROW TYPE Block
+
+Parameters -> Parameter COMMA Parameters | Parameter
+
+Parameter -> IDENTIFIER COLON TYPE 
+
+FunctionCall -> IDENTIFIER LEFT_PAREN Arguments RIGHT_PAREN
+FunctionCall -> IDENTIFIER LEFT_PAREN RIGHT_PAREN
+
+Arguments -> Expression COMMA Arguments | Expression
+
+Statements -> Statement SEMI_COLON Statements | Statement SEMI_COLON
+
+Statement -> LetDeclaration | Assignment | ReturnStatement | IfStatement | WhileLoop
+
+ReturnStatement -> RETURN Expression
+
+LetDeclaration -> LET IDENTIFIER COLON TYPE EQUAL Expression
+
+Assignment -> IDENTIFIER EQUAL Expression
+
+IfStatement -> IF Expression Block | IF Expression Block ElseClause
+
+ElseClause -> ELSE Block
+
+WhileLoop -> WHILE Expression Block
+
+Expression  -> OrExpression
+
+OrExpression  -> AndExpression | OrExpression OR AndExpression
+
+AndExpression  -> Equality | AndExpression AND Equality
+
+Equality -> Comparison EQ_OP Equality | Comparison
+
+Comparison -> Term COMPARISON_OP Comparison | Term
+
+Term -> Factor PLUS Term | Factor MINUS Term | Factor
+
+Factor -> Unary TIMES_DIV Factor | Unary
+
+Unary -> MINUS Unary | NEG Unary |Primary
+
+Primary -> Literal | IDENTIFIER | FunctionCall | LEFT_PAREN Expression RIGHT_PAREN
 "#;
 
-const LEXER: &'static str = "arrow->(->)
-boolean_literal->true|false
-comparison_op->==|<=|>=|!=
-and->&
-or->\\|
-else->else
-return->return
-equal->=
-fn->fn
-if->if
-left_brace->{
-right_brace->}
-left_paren->\\(
-right_paren->\\)
-let->let
-plus_minus->\\+|-
-semi_colon->;
-colon->:
-comma->,
-time_div->\\*|/
-type->int|float|bool|void
-while->while
-identifier ->(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|_)(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|0|1|2|3|4|5|6|7|8|9)*
-float_literal->-?(0|1|2|3|4|5|6|7|8|9)+.(0|1|2|3|4|5|6|7|8|9)*
-integer_literal->-?(1|2|3|4|5|6|7|8|9)(0|1|2|3|4|5|6|7|8|9)*
-white_space ->\\t|\\r| |\\n";
+const LEXER: &'static str = "ARROW->(->)
+BOOLEAN_LITERAL->true|false
+COMPARISON_OP->==|<=|>=|!=
+NEG->!
+AND->&
+OR->\\|
+ELSE->else
+RETURN->return
+EQUAL->=
+FN->fn
+IF->if
+LEFT_BRACE->{
+RIGHT_BRACE->}
+LEFT_PAREN->\\(
+RIGHT_PAREN->\\)
+LET->let
+PLUS->\\+
+MINUS->-
+SEMI_COLON->;
+COLON->:
+COMMA->,
+TIMES_DIV->\\*|/
+TYPE->int|float|bool|void
+WHILE->while
+IDENTIFIER ->(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|_)(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|0|1|2|3|4|5|6|7|8|9)*
+FLOAT_LITERAL->-?(0|1|2|3|4|5|6|7|8|9)+.(0|1|2|3|4|5|6|7|8|9)*
+INTEGER_LITERAL->-?(1|2|3|4|5|6|7|8|9)(0|1|2|3|4|5|6|7|8|9)*
+WHITE_SPACE ->\\t|\\r| |\\n";
 
 use std::sync::LazyLock;
 
@@ -89,7 +118,7 @@ where
         let mut non_white_space: Vec<_> = tokens
             .unwrap()
             .into_iter()
-            .filter(|tok| tok.tag != "white_space")
+            .filter(|tok| tok.tag != "WHITE_SPACE")
             .collect();
 
         let res = self
@@ -101,9 +130,6 @@ where
     }
 
     fn new(lexer_spec: &str, grammar_spec: &'a str) -> Self {
-        let parsed_grammar = Grammar::from_str(grammar_spec);
-        let augmented = parsed_grammar.unwrap().augment();
-
         Parser {
             lalr_automaton: LALR.clone(),
             lexer: lexer_spec.parse().unwrap(),
@@ -167,6 +193,56 @@ mod tests {
             return false;
         };
     };
+}";
+        let parser: Parser<BasicTreeBuilder, Node> = Parser::new(LEXER, GRAMMAR);
+
+        let ast = parser.parse(program);
+
+        assert!(ast.is_ok())
+    }
+
+    #[test]
+    fn parsing_basic_tree_builder_exhaustive_check() {
+        let program = "fn main(x: int) -> void {
+    let x: float = -3.0;
+    let y: int = 1;
+    let z: int = y - 3;
+    if (z == y) {
+        x = x - 1;
+    } else {
+        while (true) {
+            return false;
+        };
+    };
+let x: bool = true;
+let a: int = -y;
+
+let y: bool = true & false | (true & false);
+
+while true {
+    x = y;
+};
+
+if true {
+    x = y;
+};
+
+if (true) {
+    x = y;
+};
+
+if (!true) {
+    x = y;
+};
+
+if true {
+    x = y;
+} else {
+    x = y;
+};
+
+let y: bool = !(x == y) & false | (true & false);
+
 }";
         let parser: Parser<BasicTreeBuilder, Node> = Parser::new(LEXER, GRAMMAR);
 
