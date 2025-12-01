@@ -41,7 +41,7 @@ impl<'a> fmt::Display for Symbol<'a> {
     }
 }
 
-impl Symbol<'_> {
+impl<'a> Symbol<'a> {
     /// Checks if the symbol is a non-terminal.
     ///
     /// # Returns
@@ -49,6 +49,15 @@ impl Symbol<'_> {
     /// `true` if the symbol is a `NonTerminal`, otherwise `false`.
     fn is_non_terminal(&self) -> bool {
         matches!(&self, Symbol::NonTerminal(_))
+    }
+    pub fn unwrap_non_terminal(&self) -> Option<&'a str> {
+        match self {
+            Symbol::NonTerminal(nt) => Some(nt),
+            Symbol::End => todo!(),
+            Symbol::Start => todo!(),
+            Symbol::Epsilon => todo!(),
+            _ => None,
+        }
     }
 }
 
