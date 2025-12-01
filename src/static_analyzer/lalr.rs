@@ -52,11 +52,6 @@ impl From<TreeBuilderError> for ParseError {
     }
 }
 
-struct ConcreteTree<'a> {
-    node: &'a str,
-    children: Vec<ConcreteTree<'a>>,
-}
-
 impl Display for ParseError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
