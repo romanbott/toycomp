@@ -120,7 +120,7 @@ impl<'a> LALRAction<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LALRAutomaton<'a> {
     table: HashMap<(usize, Symbol<'a>), LALRAction<'a>>,
     initial_state: usize,

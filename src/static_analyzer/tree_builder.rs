@@ -28,6 +28,7 @@ impl Node {
     }
 }
 
+#[derive(Default)]
 pub struct BasicTreeBuilder {
     stack: Vec<Node>,
 }
