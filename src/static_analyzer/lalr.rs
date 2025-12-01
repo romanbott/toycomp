@@ -9,7 +9,7 @@ use crate::{
     static_analyzer::{
         grammar::{Grammar, Production, Symbol},
         lr_parser::{LR1AutomatonState, LR1Item},
-        symbol_stack::{SymbolStack, SymbolStackError},
+        tree_builder::{TreeBuilder, TreeBuilderError},
     },
 };
 
@@ -43,11 +43,11 @@ pub enum ParseError {
     NotExpected((String, Vec<String>)),
     NotExpectedVerbose((Token, Vec<String>)),
     EndWhileParsing,
-    StackError(SymbolStackError),
+    StackError(TreeBuilderError),
 }
 
-impl From<SymbolStackError> for ParseError {
-    fn from(value: SymbolStackError) -> Self {
+impl From<TreeBuilderError> for ParseError {
+    fn from(value: TreeBuilderError) -> Self {
         ParseError::StackError(value)
     }
 }
@@ -287,7 +287,7 @@ impl<'a> LALRAutomaton<'a> {
     pub fn parse<'b, T>(
         &self,
         input: &mut Vec<Token>,
-        mut symbol_stack: impl SymbolStack<Tree = T>,
+        mut symbol_stack: impl TreeBuilder<Tree = T>,
     ) -> Result<T, ParseError> {
         let mut state_stack = vec![self.initial_state];
 
@@ -354,7 +354,7 @@ mod tests {
         static_analyzer::{
             grammar::{Grammar, Symbol},
             lalr::LALRAutomaton,
-            symbol_stack::{BasicStack, SymbolStack},
+            tree_builder::{BasicTreeBuilder, TreeBuilder},
         },
     };
 
@@ -496,7 +496,7 @@ mod tests {
         ]];
 
         for mut input in should_accept {
-            let basic_stack = BasicStack::new();
+            let basic_stack = BasicTreeBuilder::new();
             let res = lalr.parse(&mut input, basic_stack);
             dbg!(&res);
             assert!(res.is_ok());

@@ -1,15 +1,15 @@
 use crate::{lexer::Token, static_analyzer::grammar::Production};
 
 #[derive(Debug)]
-pub enum SymbolStackError {
+pub enum TreeBuilderError {
     ShiftError,
     ReduceError,
 }
 
-pub trait SymbolStack {
+pub trait TreeBuilder {
     type Tree;
-    fn shift<'a, 'b>(&'a mut self, token: &'b Token) -> Result<(), SymbolStackError>;
-    fn reduce<'a, 'b>(&'a mut self, production: &'b Production) -> Result<(), SymbolStackError>;
+    fn shift<'a, 'b>(&'a mut self, token: &'b Token) -> Result<(), TreeBuilderError>;
+    fn reduce<'a, 'b>(&'a mut self, production: &'b Production) -> Result<(), TreeBuilderError>;
     fn to_tree(self) -> Self::Tree;
 }
 
@@ -28,24 +28,24 @@ impl Node {
     }
 }
 
-pub struct BasicStack {
+pub struct BasicTreeBuilder {
     stack: Vec<Node>,
 }
 
-impl BasicStack {
+impl BasicTreeBuilder {
     pub fn new() -> Self {
-        BasicStack { stack: Vec::new() }
+        BasicTreeBuilder { stack: Vec::new() }
     }
 }
 
-impl SymbolStack for BasicStack {
+impl TreeBuilder for BasicTreeBuilder {
     type Tree = Node;
-    fn shift<'a, 'b>(&'a mut self, token: &'b Token) -> Result<(), SymbolStackError> {
+    fn shift<'a, 'b>(&'a mut self, token: &'b Token) -> Result<(), TreeBuilderError> {
         self.stack.push(Node::leaf(token.tag.clone()));
         return Ok(());
     }
 
-    fn reduce<'a, 'b>(&'a mut self, production: &'b Production) -> Result<(), SymbolStackError> {
+    fn reduce<'a, 'b>(&'a mut self, production: &'b Production) -> Result<(), TreeBuilderError> {
         let to_match = production.right.len();
 
         let children = self.stack.split_off(self.stack.len() - to_match);
