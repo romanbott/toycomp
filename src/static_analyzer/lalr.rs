@@ -160,12 +160,17 @@ impl<'a> LALRAutomaton<'a> {
                 if !goto.0.is_empty() {
                     let action = LALRAction::Shift(*state_to_core.get(&goto).unwrap());
 
-                    if let Some(old) = table.insert(
-                        (*state_to_core.get(&state).unwrap(), terminal.clone()),
-                        action.clone(),
-                    ) && old != action
+                    let core = *state_to_core.get(&state).unwrap();
+                    if let Some(old) = table.insert((core, terminal.clone()), action.clone())
+                        && old != action
                     {
-                        panic!("Conflict found! {:?}", old)
+                        panic!(
+                            "Conflict found!\nWhile trying to insert action {:?} found old action {:?}.\nFor pair {}, {}",
+                            action,
+                            old,
+                            core,
+                            terminal.clone()
+                        )
                     }
                 }
             }
