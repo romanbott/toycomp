@@ -6,10 +6,11 @@ pub enum SymbolStackError {
     ReduceError,
 }
 
-pub trait SymbolStack<CT> {
+pub trait SymbolStack {
+    type Tree;
     fn shift<'a, 'b>(&'a mut self, token: &'b Token) -> Result<(), SymbolStackError>;
     fn reduce<'a, 'b>(&'a mut self, production: &'b Production) -> Result<(), SymbolStackError>;
-    fn to_tree(self) -> CT;
+    fn to_tree(self) -> Self::Tree;
 }
 
 #[derive(Debug)]
@@ -37,7 +38,8 @@ impl BasicStack {
     }
 }
 
-impl SymbolStack<Node> for BasicStack {
+impl SymbolStack for BasicStack {
+    type Tree = Node;
     fn shift<'a, 'b>(&'a mut self, token: &'b Token) -> Result<(), SymbolStackError> {
         self.stack.push(Node::leaf(token.tag.clone()));
         return Ok(());

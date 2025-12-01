@@ -284,11 +284,11 @@ impl<'a> LALRAutomaton<'a> {
         Err(ParseError::EndWhileParsing)
     }
 
-    pub fn parse<'b, CT>(
+    pub fn parse<'b, T>(
         &self,
         input: &mut Vec<Token>,
-        mut symbol_stack: impl SymbolStack<CT>,
-    ) -> Result<CT, ParseError> {
+        mut symbol_stack: impl SymbolStack<Tree = T>,
+    ) -> Result<T, ParseError> {
         let mut state_stack = vec![self.initial_state];
 
         input.push(Token {
