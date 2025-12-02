@@ -210,14 +210,19 @@ ranksep = .75;
         let final_states: Vec<String> = self
             .final_states
             .iter()
-            .map(|(fs, tag)| format!(r##"
+            .map(|(fs, tag)| {
+                format!(
+                    r##"
 subgraph cluster_final_state_{} {{
 	style=filled;
 	fillcolor="#bfffff";
         {} [shape=doublecircle]
 	label = "{}";
 }}
-"##, fs, fs, tag))
+"##,
+                    fs, fs, tag
+                )
+            })
             .collect();
 
         format!(
@@ -567,7 +572,6 @@ mod tests_tagged {
         assert_eq!(None, tagged_dfa.accept("hola1").as_deref());
         println!("{}", &minimized.to_graphviz());
         println!("{}", &tagged_dfa.to_graphviz());
-        assert!(false)
     }
 
     #[test]
