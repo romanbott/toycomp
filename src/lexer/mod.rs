@@ -30,6 +30,16 @@ impl From<(&str, &str)> for Token {
     }
 }
 
+impl From<(&str, &str, usize, usize)> for Token {
+    fn from((tag, value, row, col): (&str, &str, usize, usize)) -> Self {
+        Token {
+            tag: tag.to_string(),
+            value: value.to_string(),
+            position: (row, col),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct LexingError {
     pub position: usize,
@@ -197,13 +207,13 @@ mod tests {
         let tokens = tokens.unwrap();
 
         let expected_tokens: Vec<Token> = vec![
-            ("keyword", "if").into(),
-            ("white_space", " ").into(),
-            ("identifier", "myvar").into(),
-            ("white_space", " ").into(),
-            ("keyword", "then").into(),
-            ("white_space", " ").into(),
-            ("keyword", "else").into(),
+            ("keyword", "if", 0, 0).into(),
+            ("white_space", " ", 0, 2).into(),
+            ("identifier", "myvar", 0, 3).into(),
+            ("white_space", " ", 0, 8).into(),
+            ("keyword", "then", 0, 9).into(),
+            ("white_space", " ", 0, 13).into(),
+            ("keyword", "else", 0, 14).into(),
         ];
 
         assert_eq!(expected_tokens, tokens);
