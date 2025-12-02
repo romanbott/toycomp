@@ -111,6 +111,7 @@ pub enum Statement {
     Assignment((Identifier, Expression)),
     IfStatement((Expression, Vec<Statement>, Option<ElseClause>)),
     While((Expression, Vec<Statement>)),
+    Return(Expression),
 }
 
 #[derive(Debug, PartialEq)]
@@ -164,6 +165,7 @@ type BExpr = Box<Expression>;
 #[derive(Debug, PartialEq)]
 pub enum Expression {
     FunCall(Identifier, Vec<Expression>),
+    Ident(Identifier),
     Binary((Operator, BExpr, BExpr)),
     Unary((Operator, BExpr)),
     Lit(Literal),
@@ -244,7 +246,8 @@ impl TreeBuilder for ASTBuilder {
             }
             "TYPE" => Some(token.value.parse().map(AST::Type)?),
             "LET" | "LEFT_PAREN" | "RIGHT_PAREN" | "ARROW" | "LEFT_BRACE" | "RIGHT_BRACE"
-            | "COLON" | "COMMA" | "SEMI_COLON" | "EQUAL" | "FN" | "IF" | "ELSE" | "WHILE" => None,
+            | "COLON" | "COMMA" | "SEMI_COLON" | "EQUAL" | "FN" | "IF" | "ELSE" | "WHILE"
+            | "RETURN" => None,
             _ => {
                 // unimplemented!("Non terminal: {:?}", token)
                 return Err(TreeBuilderError::ShiftError(format!(
@@ -325,12 +328,19 @@ impl TreeBuilder for ASTBuilder {
                     _ => unreachable!(),
                 }
             }
-            "Literal" => {
-                // TODO: check if top of stack is literal
+            "Literal" | "Expression" | "Statement" => {
+                // This reduce instruccions should only "bubble-up" the already constructed
+                // ASTs, but it could be a good idea to implement some checks.
+                // TODO: add checks
             }
             "Primary" => {
-                // TODO:
+                if let Some(AST::Identifier(_)) = self.stack.last() {
+                    if let Some(AST::Identifier(i)) = self.stack.pop() {
+                        self.stack.push(AST::Expression(Expression::Ident(i)));
+                    }
+                }
             }
+
             "Unary" => {
                 if production.right.len() == 2 {
                     match self.get2() {
@@ -344,7 +354,9 @@ impl TreeBuilder for ASTBuilder {
             }
             "Factor" | "Term" | "Comparison" | "Equality" | "AndExpression" | "OrExpression" => {
                 if production.right.len() == 3 {
-                    match self.get3() {
+                    let stack_top = self.get3();
+                    dbg!(&stack_top);
+                    match stack_top {
                         Some((AST::Expression(left), AST::Operator(o), AST::Expression(right))) => {
                             self.stack.push(AST::Expression(Expression::Binary((
                                 o,
@@ -355,16 +367,6 @@ impl TreeBuilder for ASTBuilder {
                         _ => todo!(),
                     }
                 }
-            }
-            "Expression" => {
-                // TODO:
-                if let Some(AST::Expression(e)) = self.stack.last() {
-                } else {
-                    self.stack.push(AST::Expression(todo!()));
-                }
-            }
-            "Statement" => {
-                // TODO:check if top is statement
             }
             "Item" => match self.stack.pop() {
                 Some(AST::Statement(s)) => {
@@ -389,6 +391,13 @@ impl TreeBuilder for ASTBuilder {
                     _ => {
                         unreachable!("Unhandled reduce while reducing 'LetDeclaration'");
                     }
+                }
+            }
+            "ReturnStatement" => {
+                if let Some(AST::Expression(e)) = self.stack.pop() {
+                    self.stack.push(AST::Statement(Statement::Return(e)));
+                } else {
+                    unreachable!("Unhandled reduce while reducing 'Return'")
                 }
             }
             "Assignment" => {
@@ -681,26 +690,27 @@ mod tests {
         );
     }
 
-    //     #[test]
-    //     fn parsing_basic_tree_builder() {
-    //         let program = "fn main(x: int) -> void {
-    //     let x: float = -3.0;
-    //     let y: int = 1;
-    //     let z: int = y - 3;
-    //     if (z == y) {
-    //         x = x - 1;
-    //     } else {
-    //         while (true) {
-    //             return false;
-    //         };
-    //     };
-    // }";
-    //         let parser: Parser<BasicTreeBuilder, Node> = Parser::new(LEXER, GRAMMAR);
-    //
-    //         let ast = parser.parse(program);
-    //
-    //         assert!(ast.is_ok())
-    //     }
+    #[test]
+    fn parsing_ast_function_dec_control_flow() {
+        let program = "fn main(x: int) -> void {
+        let x: float = -3.0;
+        let y: int = 1;
+        let z: int = y - 3;
+        if (z == y) {
+            x = x - 1;
+        } else {
+            while (true) {
+                return false;
+            };
+        };
+    }";
+        let parser: Parser<ASTBuilder, AST> = Parser::new();
+
+        let ast = parser.parse(program);
+
+        dbg!(&ast);
+        assert!(ast.is_ok())
+    }
     //
     //     #[test]
     //     fn parsing_basic_tree_builder_exhaustive_check() {
