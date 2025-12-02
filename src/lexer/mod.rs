@@ -2,13 +2,13 @@ use std::{fmt, str::FromStr};
 
 use crate::automata::TaggedDFA;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Pattern {
     pub regex: String,
     pub tag: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Lexer {
     pub patterns: Vec<Pattern>,
 }

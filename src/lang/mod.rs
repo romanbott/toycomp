@@ -1,9 +1,11 @@
+mod ast;
+
 use crate::{
     Lexer,
     static_analyzer::{Grammar, LALRAutomaton, Production, TreeBuilder},
 };
 
-const GRAMMAR: &'static str = r#"
+const GRAMMAR_STRING: &'static str = r#"
 Program -> Item Program | Item
 
 Item -> FunctionDefinition | Statement SEMI_COLON
@@ -59,7 +61,7 @@ Unary -> MINUS Unary | NEG Unary |Primary
 Primary -> Literal | IDENTIFIER | FunctionCall | LEFT_PAREN Expression RIGHT_PAREN
 "#;
 
-const LEXER: &'static str = "ARROW->(->)
+const LEXER_STRING: &'static str = "ARROW->(->)
 BOOLEAN_LITERAL->true|false
 COMPARISON_OP->==|<=|>=|!=
 NEG->!
@@ -90,11 +92,12 @@ WHITE_SPACE ->\\t|\\r| |\\n";
 
 use std::sync::LazyLock;
 
-static GRAMMAR_STRUCT: LazyLock<Grammar<'static>> =
-    LazyLock::new(|| Grammar::from_str(GRAMMAR).unwrap().augment());
+static GRAMMAR: LazyLock<Grammar<'static>> =
+    LazyLock::new(|| Grammar::from_str(GRAMMAR_STRING).unwrap().augment());
 
-static LALR: LazyLock<LALRAutomaton> =
-    LazyLock::new(|| LALRAutomaton::from_grammar(&GRAMMAR_STRUCT));
+static LALR: LazyLock<LALRAutomaton> = LazyLock::new(|| LALRAutomaton::from_grammar(&GRAMMAR));
+
+static LEXER: LazyLock<Lexer> = LazyLock::new(|| LEXER_STRING.parse().unwrap());
 
 struct Parser<'a, T, A>
 where
@@ -129,10 +132,10 @@ where
         res.map_err(|_| ParsingError)
     }
 
-    fn new(lexer_spec: &str, grammar_spec: &'a str) -> Self {
+    fn new() -> Self {
         Parser {
             lalr_automaton: LALR.clone(),
-            lexer: lexer_spec.parse().unwrap(),
+            lexer: LEXER.clone(),
             ast_builder: T::default(),
         }
     }
@@ -142,19 +145,19 @@ where
 mod tests {
     use crate::{
         Lexer,
-        lang::{GRAMMAR, LEXER, Parser},
-        static_analyzer::{BasicTreeBuilder, Grammar, LALRAutomaton, Node},
+        lang::{GRAMMAR_STRING, LEXER_STRING, Parser},
+        static_analyzer::{BasicTreeBuilder, Grammar, Node},
     };
 
     #[test]
     fn grammar_parses() {
-        let parsed_grammar = Grammar::from_str(GRAMMAR);
+        let parsed_grammar = Grammar::from_str(GRAMMAR_STRING);
         assert!(parsed_grammar.is_ok());
     }
 
     #[test]
     fn simple_lexing() {
-        let lexer: Lexer = LEXER.parse().unwrap();
+        let lexer: Lexer = LEXER_STRING.parse().unwrap();
 
         let tokens = lexer.consume("fn main() {let x = -302323;}\n if x == y {let y = 0.1}");
         assert!(tokens.is_ok());
@@ -162,7 +165,7 @@ mod tests {
 
     #[test]
     fn complex_lexing() {
-        let lexer: Lexer = LEXER.parse().unwrap();
+        let lexer: Lexer = LEXER_STRING.parse().unwrap();
 
         let program = "fn main(x: int) -> void {
     let x = -3.0;
@@ -194,7 +197,7 @@ mod tests {
         };
     };
 }";
-        let parser: Parser<BasicTreeBuilder, Node> = Parser::new(LEXER, GRAMMAR);
+        let parser: Parser<BasicTreeBuilder, Node> = Parser::new();
 
         let ast = parser.parse(program);
 
@@ -244,7 +247,7 @@ if true {
 let y: bool = !(x == y) & false | (true & false);
 
 }";
-        let parser: Parser<BasicTreeBuilder, Node> = Parser::new(LEXER, GRAMMAR);
+        let parser: Parser<BasicTreeBuilder, Node> = Parser::new();
 
         let ast = parser.parse(program);
 
