@@ -2,7 +2,7 @@ use crate::{lexer::Token, static_analyzer::grammar::Production};
 
 #[derive(Debug)]
 pub enum TreeBuilderError {
-    ShiftError,
+    ShiftError(String),
     ReduceError,
 }
 

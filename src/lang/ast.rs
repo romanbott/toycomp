@@ -1,4 +1,4 @@
-use std::{str::FromStr, usize};
+use std::{fmt::format, str::FromStr, usize};
 
 use crate::{
     lexer::Token,
@@ -69,9 +69,17 @@ impl TryFrom<&Token> for Literal {
             ("INTEGER_LITERAL", s) => s.parse().ok().map(Literal::Int),
             ("BOOLEAN_LITERAL", s) => s.parse().ok().map(Literal::Bool),
             ("FLOAT_LITERAL", s) => s.parse().ok().map(Literal::Float),
-            _ => return Err(TreeBuilderError::ShiftError),
+            _ => {
+                return Err(TreeBuilderError::ShiftError(format!(
+                    "Error while shifting litera: found: {:?}",
+                    token
+                )));
+            }
         };
-        op.ok_or(TreeBuilderError::ShiftError)
+        op.ok_or(TreeBuilderError::ShiftError(format!(
+            "Error while parsing literal, found: {:?}",
+            token,
+        )))
     }
 }
 
@@ -129,7 +137,12 @@ impl TryFrom<&Token> for Operator {
             ("AND", "&") => Operator::And,
             ("OR", "|") => Operator::Or,
             ("NEG", "!") => Operator::Not,
-            _ => return Err(TreeBuilderError::ShiftError),
+            _ => {
+                return Err(TreeBuilderError::ShiftError(format!(
+                    "While Shifting operator found token: {:?}",
+                    token
+                )));
+            }
         };
         Ok(op)
     }
@@ -162,7 +175,12 @@ impl FromStr for Type {
             "float" => Type::Float,
             "bool" => Type::Bool,
             "void" => Type::Void,
-            _ => return Err(TreeBuilderError::ShiftError),
+            _ => {
+                return Err(TreeBuilderError::ShiftError(format!(
+                    "While shifting type found: {:?}",
+                    s
+                )));
+            }
         };
         Ok(t)
     }
@@ -215,7 +233,10 @@ impl TreeBuilder for ASTBuilder {
             | "COLON" | "COMMA" | "SEMI_COLON" | "EQUAL" | "FN" | "IF" | "ELSE" | "WHILE" => None,
             _ => {
                 // unimplemented!("Non terminal: {:?}", token)
-                return Err(TreeBuilderError::ShiftError);
+                return Err(TreeBuilderError::ShiftError(format!(
+                    "Unhandled case: {:?}",
+                    token
+                )));
             }
         };
 
@@ -345,7 +366,9 @@ impl TreeBuilder for ASTBuilder {
                         let node = AST::Statement(Statement::Declaration((ident, typ, expr)));
                         self.stack.push(node);
                     }
-                    _ => unreachable!(),
+                    _ => {
+                        unreachable!("Unhandled reduce while reducing 'LetDeclaration'");
+                    }
                 }
             }
             "Assignment" => {

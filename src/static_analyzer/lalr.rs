@@ -1,6 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
-    fmt::{Display, Formatter},
+    fmt::{Display, Formatter, write},
     vec,
 };
 
@@ -43,12 +43,12 @@ pub enum ParseError {
     NotExpected((String, Vec<String>)),
     NotExpectedVerbose((Token, Vec<String>)),
     EndWhileParsing,
-    StackError(TreeBuilderError),
+    TreeBuilderError(TreeBuilderError),
 }
 
 impl From<TreeBuilderError> for ParseError {
     fn from(value: TreeBuilderError) -> Self {
-        ParseError::StackError(value)
+        ParseError::TreeBuilderError(value)
     }
 }
 
@@ -93,7 +93,9 @@ impl Display for ParseError {
             ParseError::EndWhileParsing => {
                 write!(f, "Unexpected end of input while parsing.")
             }
-            ParseError::StackError(symbol_stack_error) => todo!(),
+            ParseError::TreeBuilderError(tree_builder_error) => {
+                write!(f, "TreeBuilder err: {:?}", tree_builder_error)
+            }
         }
     }
 }

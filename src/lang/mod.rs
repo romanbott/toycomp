@@ -108,8 +108,8 @@ where
     lalr_automaton: LALRAutomaton<'a>,
 }
 
-#[derive(Debug)]
-struct ParsingError;
+#[derive(Debug, PartialEq)]
+struct ParsingError(String);
 
 impl<'a, T, A> Parser<'a, T, A>
 where
@@ -128,8 +128,7 @@ where
             .lalr_automaton
             .parse(&mut non_white_space, self.ast_builder);
 
-        dbg!(&res);
-        res.map_err(|_| ParsingError)
+        res.map_err(|e| ParsingError(e.to_string()))
     }
 
     fn new() -> Self {
