@@ -33,6 +33,11 @@ impl ASTBuilder {
         self.stack.pop().map(|s| (s, last))
     }
 
+    fn get3(&mut self) -> Option<(AST, AST, AST)> {
+        let (s, l) = self.get2()?;
+        self.stack.pop().map(|t| (t, s, l))
+    }
+
     fn discard_last_n(&mut self, to_discard: usize) -> Result<(), ()> {
         let len = self.stack.len();
 
@@ -345,7 +350,18 @@ impl TreeBuilder for ASTBuilder {
                 // TODO:
             }
             "Factor" => {
-                // TODO:
+                if production.right.len() == 3 {
+                    match self.get3() {
+                        Some((AST::Expression(left), AST::Operator(o), AST::Expression(right))) => {
+                            self.stack.push(AST::Expression(Expression::Binary((
+                                o,
+                                left.boxed(),
+                                right.boxed(),
+                            ))));
+                        }
+                        _ => todo!(),
+                    }
+                }
             }
             "Comparison" => {
                 // TODO:
@@ -596,6 +612,27 @@ mod tests {
                     Type::Int,
                     Expression::Unary((
                         Operator::Minus,
+                        Expression::Literal(Literal::Int(4)).boxed()
+                    ))
+                )
+            ))]))
+        );
+    }
+
+    #[test]
+    fn parsing_ast_factor() {
+        let program = "let x: int = 3 * 4;";
+        let parser: Parser<ASTBuilder, AST> = Parser::new();
+
+        assert_eq!(
+            parser.parse(program),
+            Ok(AST::Program(vec![Item::Statement(Statement::Declaration(
+                (
+                    Identifier("x".to_string()),
+                    Type::Int,
+                    Expression::Binary((
+                        Operator::Times,
+                        Expression::Literal(Literal::Int(3)).boxed(),
                         Expression::Literal(Literal::Int(4)).boxed()
                     ))
                 )
