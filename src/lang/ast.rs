@@ -56,7 +56,7 @@ pub struct FunctionDefinition {
 
 #[derive(Debug, PartialEq)]
 pub enum Literal {
-    Int(u64),
+    Int(i64),
     Bool(bool),
     Float(f64),
 }
@@ -340,7 +340,6 @@ impl TreeBuilder for ASTBuilder {
                 // TODO:
                 if let Some(AST::Expression(e)) = self.stack.last() {
                 } else {
-                    dbg!(self.stack.pop());
                     self.stack.push(AST::Expression(todo!()));
                 }
             }
@@ -518,6 +517,45 @@ mod tests {
                 Type::Int,
                 Expression::Literal(Literal::Int(3))
             )))])
+        );
+    }
+
+    #[test]
+    fn parsing_ast_two_statements() {
+        let program = "let x: int = 3; let y: bool = true;";
+        let parser: Parser<ASTBuilder, AST> = Parser::new();
+
+        assert_eq!(
+            parser.parse(program),
+            Ok(AST::Program(vec![
+                Item::Statement(Statement::Declaration((
+                    Identifier("y".to_string()),
+                    Type::Bool,
+                    Expression::Literal(Literal::Bool(true))
+                ))),
+                Item::Statement(Statement::Declaration((
+                    Identifier("x".to_string()),
+                    Type::Int,
+                    Expression::Literal(Literal::Int(3))
+                )))
+            ]))
+        );
+    }
+
+    #[test]
+    fn parsing_ast_expression() {
+        let program = "let x: int = -4;";
+        let parser: Parser<ASTBuilder, AST> = Parser::new();
+
+        assert_eq!(
+            parser.parse(program),
+            Ok(AST::Program(vec![Item::Statement(Statement::Declaration(
+                (
+                    Identifier("x".to_string()),
+                    Type::Int,
+                    Expression::Literal(Literal::Int(-4))
+                )
+            ))]))
         );
     }
 
