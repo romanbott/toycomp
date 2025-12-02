@@ -63,7 +63,7 @@ Primary -> Literal | IDENTIFIER | FunctionCall | LEFT_PAREN Expression RIGHT_PAR
 
 const LEXER_STRING: &'static str = "ARROW->(->)
 BOOLEAN_LITERAL->true|false
-COMPARISON_OP->==|<=|>=|!=
+COMPARISON_OP->==|<=|>=|!=|<|>
 NEG->!
 AND->&
 OR->\\|

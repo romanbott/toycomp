@@ -124,7 +124,7 @@ pub enum Operator {
     NotEqual,
     And,
     Or,
-    Less,
+    Lesser,
     LT,
     Greater,
     GT,
@@ -137,7 +137,7 @@ impl TryFrom<&Token> for Operator {
         let op = match (token.tag.as_str(), token.value.as_str()) {
             ("COMPARISON_OP", "==") => Operator::Equal,
             ("COMPARISON_OP", "!=") => Operator::NotEqual,
-            ("COMPARISON_OP", "<") => Operator::Less,
+            ("COMPARISON_OP", "<") => Operator::Lesser,
             ("COMPARISON_OP", ">") => Operator::Greater,
             ("COMPARISON_OP", "<=") => Operator::LT,
             ("COMPARISON_OP", ">=") => Operator::GT,
@@ -166,7 +166,7 @@ pub enum Expression {
     FunCall(Identifier, Vec<Expression>),
     Binary((Operator, BExpr, BExpr)),
     Unary((Operator, BExpr)),
-    Literal(Literal),
+    Lit(Literal),
 }
 
 impl Expression {
@@ -236,12 +236,9 @@ impl TreeBuilder for ASTBuilder {
     fn shift<'a, 'b>(&'a mut self, token: &'b crate::lexer::Token) -> Result<(), TreeBuilderError> {
         let node = match token.tag.as_str() {
             "IDENTIFIER" => Some(token.value.parse().map(AST::Identifier)?),
-            "INTEGER_LITERAL" | "FLOAT_LITERAL" | "BOOLEAN_LITERAL" => Some(
-                token
-                    .try_into()
-                    .map(Expression::Literal)
-                    .map(AST::Expression)?,
-            ),
+            "INTEGER_LITERAL" | "FLOAT_LITERAL" | "BOOLEAN_LITERAL" => {
+                Some(token.try_into().map(Expression::Lit).map(AST::Expression)?)
+            }
             "COMPARISON_OP" | "PLUS" | "MINUS" | "TIMES_DIV" | "NEG" | "AND" | "OR" => {
                 Some(token.try_into().map(AST::Operator)?)
             }
@@ -334,7 +331,6 @@ impl TreeBuilder for ASTBuilder {
             "Primary" => {
                 // TODO:
             }
-            //   Unary -> MINUS Unary | NEG Unary |Primary
             "Unary" => {
                 if production.right.len() == 2 {
                     match self.get2() {
@@ -346,10 +342,7 @@ impl TreeBuilder for ASTBuilder {
                     }
                 }
             }
-            "Term" => {
-                // TODO:
-            }
-            "Factor" => {
+            "Factor" | "Term" | "Comparison" | "Equality" | "AndExpression" | "OrExpression" => {
                 if production.right.len() == 3 {
                     match self.get3() {
                         Some((AST::Expression(left), AST::Operator(o), AST::Expression(right))) => {
@@ -362,18 +355,6 @@ impl TreeBuilder for ASTBuilder {
                         _ => todo!(),
                     }
                 }
-            }
-            "Comparison" => {
-                // TODO:
-            }
-            "Equality" => {
-                // TODO:
-            }
-            "AndExpression" => {
-                // TODO:
-            }
-            "OrExpression" => {
-                // TODO:
             }
             "Expression" => {
                 // TODO:
@@ -540,6 +521,7 @@ mod tests {
         Parser,
         ast::{AST, ASTBuilder, Expression, Identifier, Item, Literal, Operator, Statement, Type},
     };
+    use Expression::*;
 
     #[test]
     fn parsing_ast_single_statement() {
@@ -555,7 +537,7 @@ mod tests {
             AST::Program(vec![Item::Statement(Statement::Declaration((
                 Identifier("x".to_string()),
                 Type::Int,
-                Expression::Literal(Literal::Int(3))
+                Expression::Lit(Literal::Int(3))
             )))])
         );
     }
@@ -571,12 +553,12 @@ mod tests {
                 Item::Statement(Statement::Declaration((
                     Identifier("y".to_string()),
                     Type::Bool,
-                    Expression::Literal(Literal::Bool(true))
+                    Lit(Literal::Bool(true))
                 ))),
                 Item::Statement(Statement::Declaration((
                     Identifier("x".to_string()),
                     Type::Int,
-                    Expression::Literal(Literal::Int(3))
+                    Lit(Literal::Int(3))
                 )))
             ]))
         );
@@ -593,7 +575,7 @@ mod tests {
                 (
                     Identifier("x".to_string()),
                     Type::Int,
-                    Expression::Literal(Literal::Int(-4))
+                    Lit(Literal::Int(-4))
                 )
             ))]))
         );
@@ -610,10 +592,7 @@ mod tests {
                 (
                     Identifier("x".to_string()),
                     Type::Int,
-                    Expression::Unary((
-                        Operator::Minus,
-                        Expression::Literal(Literal::Int(4)).boxed()
-                    ))
+                    Unary((Operator::Minus, Lit(Literal::Int(4)).boxed()))
                 )
             ))]))
         );
@@ -630,10 +609,72 @@ mod tests {
                 (
                     Identifier("x".to_string()),
                     Type::Int,
-                    Expression::Binary((
+                    Binary((
                         Operator::Times,
-                        Expression::Literal(Literal::Int(3)).boxed(),
-                        Expression::Literal(Literal::Int(4)).boxed()
+                        Lit(Literal::Int(3)).boxed(),
+                        Lit(Literal::Int(4)).boxed()
+                    ))
+                )
+            ))]))
+        );
+    }
+
+    #[test]
+    fn parsing_ast_term() {
+        let program = "let x: int = 3 + 4;";
+        let parser: Parser<ASTBuilder, AST> = Parser::new();
+
+        assert_eq!(
+            parser.parse(program),
+            Ok(AST::Program(vec![Item::Statement(Statement::Declaration(
+                (
+                    Identifier("x".to_string()),
+                    Type::Int,
+                    Binary((
+                        Operator::Plus,
+                        Lit(Literal::Int(3)).boxed(),
+                        Lit(Literal::Int(4)).boxed()
+                    ))
+                )
+            ))]))
+        );
+    }
+
+    #[test]
+    fn parsing_ast_exhaustive_expression() {
+        let program = "let x: int = 3 + -(4) == 0.3 < 5 & true | !false;";
+        let parser: Parser<ASTBuilder, AST> = Parser::new();
+
+        assert_eq!(
+            parser.parse(program),
+            Ok(AST::Program(vec![Item::Statement(Statement::Declaration(
+                (
+                    Identifier("x".to_string()),
+                    Type::Int,
+                    Binary((
+                        Operator::Or,
+                        Binary((
+                            Operator::And,
+                            Binary((
+                                Operator::Equal,
+                                Binary((
+                                    Operator::Plus,
+                                    Lit(Literal::Int(3)).boxed(),
+                                    Unary((Operator::Minus, Lit(Literal::Int(4)).boxed(),)).boxed(),
+                                ))
+                                .boxed(),
+                                Binary((
+                                    Operator::Lesser,
+                                    Lit(Literal::Float(0.3)).boxed(),
+                                    Lit(Literal::Int(5)).boxed(),
+                                ))
+                                .boxed()
+                            ))
+                            .boxed(),
+                            Lit(Literal::Bool(true)).boxed()
+                        ))
+                        .boxed(),
+                        Unary((Operator::Not, Lit(Literal::Bool(false)).boxed())).boxed()
                     ))
                 )
             ))]))
