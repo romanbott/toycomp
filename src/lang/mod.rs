@@ -56,7 +56,7 @@ Term -> Factor PLUS Term | Factor MINUS Term | Factor
 
 Factor -> Unary TIMES_DIV Factor | Unary
 
-Unary -> MINUS Unary | NEG Unary |Primary
+Unary -> MINUS Unary | NEG Unary | Primary
 
 Primary -> Literal | IDENTIFIER | FunctionCall | LEFT_PAREN Expression RIGHT_PAREN
 "#;
@@ -180,6 +180,17 @@ mod tests {
 }";
 
         let tokens = lexer.consume(program);
+    }
+
+    #[test]
+    fn parsing_basic_tree_builder_unary() {
+        let program = "let x: int = -(3);";
+        let parser: Parser<BasicTreeBuilder, Node> = Parser::new();
+
+        let ast = parser.parse(program);
+
+        dbg!(&ast);
+        assert!(ast.is_ok());
     }
 
     #[test]

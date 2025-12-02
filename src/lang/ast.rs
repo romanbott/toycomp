@@ -27,6 +27,12 @@ impl ASTBuilder {
             .ok()
             .map(|arr: &[AST; 2]| (&arr[0], &arr[1]))
     }
+
+    fn get2(&mut self) -> Option<(AST, AST)> {
+        let last = self.stack.pop()?;
+        self.stack.pop().map(|s| (s, last))
+    }
+
     fn discard_last_n(&mut self, to_discard: usize) -> Result<(), ()> {
         let len = self.stack.len();
 
@@ -158,6 +164,12 @@ pub enum Expression {
     Literal(Literal),
 }
 
+impl Expression {
+    fn boxed(self) -> BExpr {
+        Box::new(self)
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum Type {
     Int,
@@ -253,6 +265,8 @@ impl TreeBuilder for ASTBuilder {
             .unwrap_non_terminal()
             .expect("Left side of production should be non-terminal.");
 
+        dbg!(&production);
+
         match prod {
             // LetDeclaration -> let identifier colon type equal Expression
             "Parameter" => {
@@ -315,8 +329,17 @@ impl TreeBuilder for ASTBuilder {
             "Primary" => {
                 // TODO:
             }
+            //   Unary -> MINUS Unary | NEG Unary |Primary
             "Unary" => {
-                // TODO:
+                if production.right.len() == 2 {
+                    match self.get2() {
+                        Some((AST::Operator(o), AST::Expression(e))) => {
+                            self.stack
+                                .push(AST::Expression(Expression::Unary((o, Box::new(e)))));
+                        }
+                        _ => todo!(),
+                    }
+                }
             }
             "Term" => {
                 // TODO:
@@ -357,6 +380,7 @@ impl TreeBuilder for ASTBuilder {
                 None => unreachable!("Processing item, empty stack"),
             },
             "LetDeclaration" => {
+                dbg!(&self.stack);
                 let exp_node = self.stack.pop().unwrap();
                 let type_node = self.stack.pop().unwrap();
                 let ident_node = self.stack.pop().unwrap();
@@ -498,7 +522,7 @@ impl TreeBuilder for ASTBuilder {
 mod tests {
     use crate::lang::{
         Parser,
-        ast::{AST, ASTBuilder, Expression, Identifier, Item, Literal, Statement, Type},
+        ast::{AST, ASTBuilder, Expression, Identifier, Item, Literal, Operator, Statement, Type},
     };
 
     #[test]
@@ -543,7 +567,7 @@ mod tests {
     }
 
     #[test]
-    fn parsing_ast_expression() {
+    fn parsing_ast_negative_int_literal() {
         let program = "let x: int = -4;";
         let parser: Parser<ASTBuilder, AST> = Parser::new();
 
@@ -554,6 +578,26 @@ mod tests {
                     Identifier("x".to_string()),
                     Type::Int,
                     Expression::Literal(Literal::Int(-4))
+                )
+            ))]))
+        );
+    }
+
+    #[test]
+    fn parsing_ast_unary() {
+        let program = "let x: int = -(4);";
+        let parser: Parser<ASTBuilder, AST> = Parser::new();
+
+        assert_eq!(
+            parser.parse(program),
+            Ok(AST::Program(vec![Item::Statement(Statement::Declaration(
+                (
+                    Identifier("x".to_string()),
+                    Type::Int,
+                    Expression::Unary((
+                        Operator::Minus,
+                        Expression::Literal(Literal::Int(4)).boxed()
+                    ))
                 )
             ))]))
         );
