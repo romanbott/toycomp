@@ -1,6 +1,7 @@
 mod grammar;
 mod lalr;
 mod lr_parser;
+mod owned_lalr;
 mod tree_builder;
 
 pub use grammar::Grammar;
