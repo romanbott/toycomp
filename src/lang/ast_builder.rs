@@ -244,7 +244,7 @@ impl TreeBuilder for ASTBuilder {
             },
             "ElseClause" => match self.stack.pop() {
                 Some(AST::Block(s)) => {
-                    self.stack.push(AST::Else(ElseClause { block: s }));
+                    self.stack.push(AST::Else(ElseClause(s)));
                 }
                 _ => unreachable!(),
             },

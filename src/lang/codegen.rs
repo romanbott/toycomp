@@ -1,4 +1,4 @@
-use crate::lang::ast::{AST, Expression, Literal, Operator};
+use crate::lang::ast::{AST, ElseClause, Expression, Literal, Operator, Statement};
 use std::io::{self, Write};
 
 pub struct Codegen {
@@ -70,6 +70,14 @@ impl Codegen {
                 writeln!(out, "SUB 0 {} {}", a, dest)?;
                 Ok(dest)
             }
+            // TODO:
+            // handle std functions:
+            // - print
+            // - input
+            // - pixel
+            // - mod
+            // - time
+            // - key
             Expression::FunCall(ident, args) => {
                 let ret = self.make_temp();
                 self.emit_var(out, &ret)?;
@@ -86,11 +94,62 @@ impl Codegen {
             _ => unimplemented!(),
         }
     }
+
+    fn gen_stmt<W: Write>(&mut self, stmt: Statement, out: &mut W) -> io::Result<()> {
+        match stmt {
+            Statement::Declaration(identifier, _, expression) => {
+                self.emit_var(out, &identifier.0)?;
+                self.gen_stmt(Statement::Assignment(identifier, expression), out)?
+            }
+            Statement::Assignment(identifier, expression) => {
+                let src = self.gen_expr(&expression, out)?;
+                writeln!(out, "ASSIGN {} {}", src, identifier.0)?;
+            }
+            Statement::IfStatement(expression, statements, else_clause) => {
+                let cond = self.gen_expr(&expression, out)?;
+                let label_then = self.make_label(Some("THEN"));
+                let label_end = self.make_label(Some("ENDIF"));
+
+                writeln!(out, "IF {} GOTO {}", cond, label_then)?;
+
+                if let Some(ElseClause(statements)) = else_clause {
+                    for stmt in statements {
+                        self.gen_stmt(stmt, out)?;
+                    }
+                }
+
+                writeln!(out, "GOTO {}", label_end)?;
+                writeln!(out, "LABEL {}", label_then)?;
+                for stmt in statements {
+                    self.gen_stmt(stmt, out)?;
+                }
+                writeln!(out, "LABEL {}", label_end)?;
+            }
+            Statement::While(expression, statements) => {
+                let start = self.make_label(Some("WHILE_START"));
+                let end = self.make_label(Some("WHILE_END"));
+
+                writeln!(out, "LABEL {}", start)?;
+                let cond = self.gen_expr(&expression, out)?;
+                writeln!(out, "IFFALSE {} GOTO {}", cond, end)?;
+                for stmt in statements {
+                    self.gen_stmt(stmt, out)?;
+                }
+                writeln!(out, "GOTO {}", start)?;
+                writeln!(out, "LABEL {}", end)?;
+            }
+            Statement::Return(expression) => {
+                let val = self.gen_expr(&expression, out)?;
+                writeln!(out, "RETURN {}", val)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::lang::ast::{Identifier, Operator};
+    use crate::lang::ast::{Identifier, Operator, Type};
 
     use super::*;
 
@@ -127,9 +186,25 @@ mod tests {
             result_string.unwrap().as_str()
         )
     }
+
+    #[test]
+    fn if_stmt_gen() {
+        let stmt = Statement::IfStatement(
+            1.into(),
+            vec![Statement::Declaration("x".into(), Type::Int, 1.into())],
+            None,
+        );
+
+        let mut cg = Codegen::new();
+
+        let mut buffer: Vec<u8> = Vec::new();
+        _ = cg.gen_stmt(stmt, &mut buffer);
+
+        let result_string = String::from_utf8(buffer).unwrap();
+
         assert_eq!(
-            "VAR _t1\nASSIGN 1 _t1\nVAR _t2\nASSIGN 2 _t2\nVAR _t3\nADD _t1 _t2 _t3\n",
-            result_string.unwrap().as_str()
+            "VAR _t1\nASSIGN 1 _t1\nIF _t1 GOTO THEN_1\nGOTO ENDIF_2\nLABEL THEN_1\nVAR x\nVAR _t2\nASSIGN 1 _t2\nASSIGN _t2 x\nLABEL ENDIF_2\n",
+            result_string
         )
     }
 }

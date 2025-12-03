@@ -66,9 +66,7 @@ impl Display for Literal {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct ElseClause {
-    pub block: Vec<Statement>,
-}
+pub struct ElseClause(pub Vec<Statement>);
 
 #[derive(Debug, PartialEq)]
 pub enum Statement {
