@@ -9,7 +9,7 @@ pub enum TreeBuilderError {
 pub trait TreeBuilder {
     type Tree;
     fn shift<'a, 'b>(&'a mut self, token: &'b Token) -> Result<(), TreeBuilderError>;
-    fn reduce<'a, 'b>(&'a mut self, production: &'b Production) -> Result<(), TreeBuilderError>;
+    fn reduce<'a, 'b>(&'a mut self, left: &str, right_len: usize) -> Result<(), TreeBuilderError>;
     fn to_tree(self) -> Self::Tree;
 }
 
@@ -46,13 +46,13 @@ impl TreeBuilder for BasicTreeBuilder {
         return Ok(());
     }
 
-    fn reduce<'a, 'b>(&'a mut self, production: &'b Production) -> Result<(), TreeBuilderError> {
-        let to_match = production.right.len();
+    fn reduce<'a, 'b>(&'a mut self, left: &str, right_len: usize) -> Result<(), TreeBuilderError> {
+        let to_match = right_len;
 
         let children = self.stack.split_off(self.stack.len() - to_match);
 
         self.stack.push(Node {
-            value: production.left.to_string(),
+            value: left.to_string(),
             children,
         });
         return Ok(());

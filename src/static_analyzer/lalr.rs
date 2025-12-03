@@ -101,7 +101,7 @@ impl Display for ParseError {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-enum LALRAction<'a> {
+pub enum LALRAction<'a> {
     Shift(usize),
     Reduce(Production<'a>),
     Accept,
@@ -119,9 +119,9 @@ impl<'a> LALRAction<'a> {
 
 #[derive(Debug, Clone)]
 pub struct LALRAutomaton<'a> {
-    table: HashMap<(usize, Symbol<'a>), LALRAction<'a>>,
-    initial_state: usize,
-    terminals: Vec<Symbol<'a>>,
+    pub table: HashMap<(usize, Symbol<'a>), LALRAction<'a>>,
+    pub initial_state: usize,
+    pub terminals: Vec<Symbol<'a>>,
 }
 
 impl<'a> LALRAutomaton<'a> {
@@ -312,7 +312,8 @@ impl<'a> LALRAutomaton<'a> {
                 Some(LALRAction::Reduce(production)) => {
                     let to_match = production.right.len();
 
-                    symbol_stack.reduce(production)?;
+                    symbol_stack
+                        .reduce(production.left.unwrap_non_terminal().unwrap(), to_match)?;
                     state_stack.truncate(state_stack.len() - to_match);
 
                     let current_state = state_stack.last().expect("Empty state stack!");

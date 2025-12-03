@@ -80,12 +80,8 @@ impl TreeBuilder for ASTBuilder {
         Ok(())
     }
 
-    fn reduce<'a, 'b>(&'a mut self, production: &'b Production) -> Result<(), TreeBuilderError> {
-        let prod = production
-            .left
-            .unwrap_non_terminal()
-            .expect("Left side of production should be non-terminal.");
-
+    fn reduce<'a, 'b>(&'a mut self, left: &str, right_len: usize) -> Result<(), TreeBuilderError> {
+        let prod = left;
         match prod {
             // LetDeclaration -> let identifier colon type equal Expression
             "Parameter" => {
@@ -132,7 +128,7 @@ impl TreeBuilder for ASTBuilder {
                 }
             }
             "FunctionCall" => {
-                if production.right.len() == 4 {
+                if right_len == 4 {
                     let args = self.stack.pop().unwrap();
                     let ident_node = self.stack.pop().unwrap();
                     match (ident_node, args) {
@@ -167,7 +163,7 @@ impl TreeBuilder for ASTBuilder {
             }
 
             "Unary" => {
-                if production.right.len() == 2 {
+                if right_len == 2 {
                     match self.get2() {
                         Some((AST::Operator(o), AST::Expression(e))) => {
                             self.stack
@@ -178,7 +174,7 @@ impl TreeBuilder for ASTBuilder {
                 }
             }
             "Factor" | "Term" | "Comparison" | "Equality" | "AndExpression" | "OrExpression" => {
-                if production.right.len() == 3 {
+                if right_len == 3 {
                     let stack_top = self.get3();
                     match stack_top {
                         Some((AST::Expression(left), AST::Operator(o), AST::Expression(right))) => {
