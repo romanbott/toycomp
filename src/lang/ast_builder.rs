@@ -4,7 +4,7 @@ use crate::{
 };
 
 #[derive(Default)]
-struct ASTBuilder {
+pub struct ASTBuilder {
     stack: Vec<AST>,
 }
 

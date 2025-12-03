@@ -1,4 +1,4 @@
-use crate::lang::ast::{AST, ElseClause, Expression, Literal, Operator, Statement};
+use crate::lang::ast::{AST, ElseClause, Expression, Item, Literal, Operator, Statement};
 use std::io::{self, Write};
 
 pub struct Codegen {
@@ -145,11 +145,45 @@ impl Codegen {
         }
         Ok(())
     }
+
+    fn gen_item<W: Write>(&mut self, item: Item, out: &mut W) -> io::Result<()> {
+        match item {
+            Item::FunDef(fun) => {
+                writeln!(out, "LABEL {}", fun.ident.0)?;
+
+                for stmt in fun.body {
+                    self.gen_stmt(stmt, out)?;
+                }
+
+                writeln!(out, "RETURN 0")?;
+            }
+            Item::Statement(statement) => self.gen_stmt(statement, out)?,
+        }
+        Ok(())
+    }
+
+    fn gen_program<W: Write>(&mut self, program: AST, out: &mut W) -> io::Result<()> {
+        match program {
+            AST::Program(items) => {
+                for item in items {
+                    self.gen_item(item, out)?
+                }
+            }
+            _ => {
+                panic!("Root node should be a Program.")
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::lang::ast::{Identifier, Operator, Type};
+    use crate::lang::{
+        ast::{Identifier, Operator, Type},
+        ast_builder::ASTBuilder,
+        parser::Parser,
+    };
 
     use super::*;
 
