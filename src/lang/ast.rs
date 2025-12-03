@@ -1,4 +1,4 @@
-use std::{fmt::format, str::FromStr, usize};
+use std::str::FromStr;
 
 use crate::{
     lexer::Token,
@@ -227,13 +227,11 @@ pub enum AST {
     Program(Vec<Item>),
     Item(Item),
     Block(Vec<Statement>),
-    //Literal(Literal),
     Identifier(Identifier),
     Statement(Statement),
     Type(Type),
     Expression(Expression),
     Operator(Operator),
-    // Boolean(BooleanExpression),
     Params(Vec<Param>),
     Arguments(Vec<Expression>),
     Else(ElseClause),
@@ -546,8 +544,8 @@ impl TreeBuilder for ASTBuilder {
 #[cfg(test)]
 mod tests {
     use crate::lang::{
-        Parser,
         ast::{AST, ASTBuilder, Expression, Identifier, Item, Literal, Operator, Statement, Type},
+        parser::Parser,
     };
     use Expression::*;
     use Operator::*;
