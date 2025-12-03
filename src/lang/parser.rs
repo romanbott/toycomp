@@ -1,22 +1,24 @@
 use crate::{
-    Lexer,
+    Lexer, OLALRAutomaton,
     lang::{grammar::LALR, lexer::LEXER},
     static_analyzer::{LALRAutomaton, TreeBuilder},
 };
 
-pub struct Parser<'a, T, A>
+pub struct Parser<T, A>
 where
     T: TreeBuilder<Tree = A>,
 {
     lexer: Lexer,
     ast_builder: T,
-    lalr_automaton: LALRAutomaton<'a>,
+    lalr_automaton: OLALRAutomaton,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct ParsingError(String);
 
-impl<'a, T, A> Parser<'a, T, A>
+const EMBEDDED_DATA: &[u8] = include_bytes!("./../../toycomp_lalr_automaton.bin");
+
+impl<T, A> Parser<T, A>
 where
     T: TreeBuilder<Tree = A> + Default,
     A: std::fmt::Debug,
@@ -37,8 +39,17 @@ where
     }
 
     pub fn new() -> Self {
+        let config = bincode::config::standard();
+
+        let (decoded_automaton, _bytes_consumed) =
+            bincode::decode_from_slice::<OLALRAutomaton, _>(EMBEDDED_DATA, config).unwrap();
+
+        // let lalr = &LALR.clone();
+        // let automaton: OLALRAutomaton = lalr.into();
+        // assert_ne!(decoded_asset, automaton);
+
         Parser {
-            lalr_automaton: LALR.clone(),
+            lalr_automaton: decoded_automaton,
             lexer: LEXER.clone(),
             ast_builder: T::default(),
         }

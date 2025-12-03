@@ -1,3 +1,4 @@
+use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt};
 
@@ -14,7 +15,9 @@ use crate::{
 ///
 /// Symbols can be either a `Terminal`, a `NonTerminal`, or the special `End`
 /// symbol which signifies the end of the input stream.
-#[derive(Debug, PartialEq, Eq, Clone, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, PartialEq, Eq, Clone, PartialOrd, Ord, Hash, Serialize, Deserialize, Encode, Decode,
+)]
 pub struct OSymbol {
     kind: String,
     value: String,
@@ -53,7 +56,9 @@ impl<'a> From<&Symbol<'a>> for OSymbol {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Ord, PartialOrd, Clone, Serialize, Deserialize)]
+#[derive(
+    Debug, PartialEq, Eq, Hash, Ord, PartialOrd, Clone, Serialize, Deserialize, Encode, Decode,
+)]
 pub struct OProduction {
     /// The non-terminal symbol on the left side of the production.
     pub left: OSymbol,
@@ -70,7 +75,7 @@ impl<'a> From<&Production<'a>> for OProduction {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize, Encode, Decode)]
 enum OLALRAction {
     Shift(usize),
     Reduce(OProduction),
@@ -98,8 +103,7 @@ impl<'a> From<&LALRAction<'a>> for OLALRAction {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-struct Key(usize, String, String);
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Encode, Decode)]
 pub struct Key {
     pub num: usize,
     pub s1: String,
@@ -136,7 +140,7 @@ impl<'a> Borrow<KeyRef<'a>> for Key {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq)]
 pub struct OLALRAutomaton {
     table: HashMap<Key, OLALRAction>,
     initial_state: usize,

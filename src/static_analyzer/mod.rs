@@ -7,6 +7,7 @@ mod tree_builder;
 pub use grammar::Grammar;
 pub use grammar::Production;
 pub use lalr::LALRAutomaton;
+pub use owned_lalr::OLALRAutomaton;
 pub use tree_builder::BasicTreeBuilder;
 pub use tree_builder::Node;
 pub use tree_builder::TreeBuilder;

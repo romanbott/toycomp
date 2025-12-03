@@ -8,5 +8,7 @@ pub use automata::NDFA;
 pub use lang::AST;
 pub use lang::ASTBuilder;
 pub use lang::Codegen;
+pub use lang::LALR;
 pub use lang::Parser;
 pub use lexer::Lexer;
+pub use static_analyzer::OLALRAutomaton;

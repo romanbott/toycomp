@@ -8,4 +8,5 @@ mod parser;
 pub use ast::AST;
 pub use ast_builder::ASTBuilder;
 pub use codegen::Codegen;
+pub use grammar::LALR;
 pub use parser::Parser;

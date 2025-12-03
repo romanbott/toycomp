@@ -5,10 +5,15 @@ edition = "2024"
 
 [[bin]]
 name = "regex-cli"
+
 [[bin]]
 name = "compiler"
 
+[[bin]]
+name = "automata_generator"
+
 [dependencies]
+bincode = { version = "2.0.1", features = ["serde"] }
 clap = { version = "4.5.53", features = ["derive"] }
 itertools = "0.14.0"
 serde = { version = "1.0.228", features = ["derive"] }

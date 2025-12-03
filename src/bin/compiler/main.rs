@@ -97,7 +97,7 @@ fn compile(input_path: &PathBuf, output_path: Option<&PathBuf>) -> io::Result<()
 
     let ast = match ast {
         Ok(ast) => ast,
-        Err(_) => todo!(),
+        Err(e) => panic!("{:?}", e),
     };
 
     match output_path {

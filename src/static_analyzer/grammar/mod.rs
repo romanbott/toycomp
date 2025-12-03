@@ -25,7 +25,7 @@ impl<'a> Into<(String, String)> for &Symbol<'a> {
         match self {
             Symbol::Terminal(s) => ("Terminal".to_string(), s.to_string()),
             Symbol::NonTerminal(s) => ("NonTerminal".to_string(), s.to_string()),
-            Symbol::End => ("End".to_string(), "".to_string()),
+            Symbol::End => ("<END>".to_string(), "<END>".to_string()),
             Symbol::Start => ("Start".to_string(), "".to_string()),
             Symbol::Epsilon => ("Epsilon".to_string(), "".to_string()),
         }
