@@ -12,6 +12,20 @@ impl Codegen {
             label_counter: 0,
         }
     }
+    fn make_temp(&mut self) -> String {
+        self.temp_counter += 1;
+        format!("_t{}", self.temp_counter)
+    }
+    fn make_label(&mut self, base: Option<&str>) -> String {
+        self.label_counter += 1;
+        let base_str = base.unwrap_or("L");
+        format!("{}_{}", base_str, self.label_counter)
+    }
+    fn emit_var<W: Write>(&self, out: &mut W, name: &str) -> io::Result<()> {
+        writeln!(out, "VAR {}", name)
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
