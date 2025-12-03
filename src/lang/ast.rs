@@ -107,10 +107,10 @@ pub struct ElseClause {
 
 #[derive(Debug, PartialEq)]
 pub enum Statement {
-    Declaration((Identifier, Type, Expression)),
-    Assignment((Identifier, Expression)),
-    IfStatement((Expression, Vec<Statement>, Option<ElseClause>)),
-    While((Expression, Vec<Statement>)),
+    Declaration(Identifier, Type, Expression),
+    Assignment(Identifier, Expression),
+    IfStatement(Expression, Vec<Statement>, Option<ElseClause>),
+    While(Expression, Vec<Statement>),
     Return(Expression),
 }
 
@@ -166,8 +166,8 @@ type BExpr = Box<Expression>;
 pub enum Expression {
     FunCall(Identifier, Vec<Expression>),
     Ident(Identifier),
-    Binary((Operator, BExpr, BExpr)),
-    Unary((Operator, BExpr)),
+    Binary(Operator, BExpr, BExpr),
+    Unary(Operator, BExpr),
     Lit(Literal),
 }
 
@@ -359,7 +359,7 @@ impl TreeBuilder for ASTBuilder {
                     match self.get2() {
                         Some((AST::Operator(o), AST::Expression(e))) => {
                             self.stack
-                                .push(AST::Expression(Expression::Unary((o, Box::new(e)))));
+                                .push(AST::Expression(Expression::Unary(o, Box::new(e))));
                         }
                         _ => todo!(),
                     }
@@ -370,11 +370,11 @@ impl TreeBuilder for ASTBuilder {
                     let stack_top = self.get3();
                     match stack_top {
                         Some((AST::Expression(left), AST::Operator(o), AST::Expression(right))) => {
-                            self.stack.push(AST::Expression(Expression::Binary((
+                            self.stack.push(AST::Expression(Expression::Binary(
                                 o,
                                 left.boxed(),
                                 right.boxed(),
-                            ))));
+                            )));
                         }
                         _ => todo!(),
                     }
@@ -396,7 +396,7 @@ impl TreeBuilder for ASTBuilder {
                 let ident_node = self.stack.pop().unwrap();
                 match (ident_node, type_node, exp_node) {
                     (AST::Identifier(ident), AST::Type(typ), AST::Expression(expr)) => {
-                        let node = AST::Statement(Statement::Declaration((ident, typ, expr)));
+                        let node = AST::Statement(Statement::Declaration(ident, typ, expr));
                         self.stack.push(node);
                     }
                     _ => {
@@ -416,7 +416,7 @@ impl TreeBuilder for ASTBuilder {
                 let ident_node = self.stack.pop().unwrap();
                 match (ident_node, exp_node) {
                     (AST::Identifier(ident), AST::Expression(expr)) => {
-                        let node = AST::Statement(Statement::Assignment((ident, expr)));
+                        let node = AST::Statement(Statement::Assignment(ident, expr));
                         self.stack.push(node);
                     }
                     _ => unreachable!(),
@@ -425,7 +425,7 @@ impl TreeBuilder for ASTBuilder {
             "WhileLoop" => match self.stack.pop() {
                 Some(AST::Block(s)) => {
                     if let Some(AST::Expression(e)) = self.stack.pop() {
-                        self.stack.push(AST::Statement(Statement::While((e, s))));
+                        self.stack.push(AST::Statement(Statement::While(e, s)));
                     }
                 }
                 _ => unreachable!(),
@@ -440,18 +440,18 @@ impl TreeBuilder for ASTBuilder {
                 Some(AST::Else(ec)) => {
                     if let Some(AST::Block(if_block)) = self.stack.pop() {
                         if let Some(AST::Expression(e)) = self.stack.pop() {
-                            self.stack.push(AST::Statement(Statement::IfStatement((
+                            self.stack.push(AST::Statement(Statement::IfStatement(
                                 e,
                                 if_block,
                                 Some(ec),
-                            ))));
+                            )));
                         }
                     }
                 }
                 Some(AST::Block(s)) => {
                     if let Some(AST::Expression(e)) = self.stack.pop() {
                         self.stack
-                            .push(AST::Statement(Statement::IfStatement((e, s, None))));
+                            .push(AST::Statement(Statement::IfStatement(e, s, None)));
                     }
                 }
                 _ => unreachable!(),
@@ -561,11 +561,11 @@ mod tests {
 
         assert_eq!(
             ast.unwrap(),
-            AST::Program(vec![Item::Statement(Statement::Declaration((
+            AST::Program(vec![Item::Statement(Statement::Declaration(
                 Identifier("x".to_string()),
                 Type::Int,
                 Expression::Lit(Literal::Int(3))
-            )))])
+            ))])
         );
     }
 
@@ -577,16 +577,16 @@ mod tests {
         assert_eq!(
             parser.parse(program),
             Ok(AST::Program(vec![
-                Item::Statement(Statement::Declaration((
+                Item::Statement(Statement::Declaration(
                     "x".into(),
                     Type::Int,
                     Lit(Literal::Int(3))
-                ))),
-                Item::Statement(Statement::Declaration((
+                )),
+                Item::Statement(Statement::Declaration(
                     "y".into(),
                     Type::Bool,
                     Lit(Literal::Bool(true))
-                ))),
+                )),
             ]))
         );
     }
@@ -599,7 +599,9 @@ mod tests {
         assert_eq!(
             parser.parse(program),
             Ok(AST::Program(vec![Item::Statement(Statement::Declaration(
-                ("x".into(), Type::Int, Lit(Literal::Int(-4)))
+                "x".into(),
+                Type::Int,
+                Lit(Literal::Int(-4))
             ))]))
         );
     }
@@ -612,11 +614,9 @@ mod tests {
         assert_eq!(
             parser.parse(program),
             Ok(AST::Program(vec![Item::Statement(Statement::Declaration(
-                (
-                    "x".into(),
-                    Type::Int,
-                    Unary((Operator::Minus, Lit(Literal::Int(4)).boxed()))
-                )
+                "x".into(),
+                Type::Int,
+                Unary(Operator::Minus, Lit(Literal::Int(4)).boxed())
             ))]))
         );
     }
@@ -629,14 +629,12 @@ mod tests {
         assert_eq!(
             parser.parse(program),
             Ok(AST::Program(vec![Item::Statement(Statement::Declaration(
-                (
-                    "x".into(),
-                    Type::Int,
-                    Binary((
-                        Operator::Times,
-                        Lit(Literal::Int(3)).boxed(),
-                        Lit(Literal::Int(4)).boxed()
-                    ))
+                "x".into(),
+                Type::Int,
+                Binary(
+                    Operator::Times,
+                    Lit(Literal::Int(3)).boxed(),
+                    Lit(Literal::Int(4)).boxed()
                 )
             ))]))
         );
@@ -650,14 +648,12 @@ mod tests {
         assert_eq!(
             parser.parse(program),
             Ok(AST::Program(vec![Item::Statement(Statement::Declaration(
-                (
-                    Identifier("x".to_string()),
-                    Type::Int,
-                    Binary((
-                        Operator::Plus,
-                        Lit(Literal::Int(3)).boxed(),
-                        Lit(Literal::Int(4)).boxed()
-                    ))
+                Identifier("x".to_string()),
+                Type::Int,
+                Binary(
+                    Operator::Plus,
+                    Lit(Literal::Int(3)).boxed(),
+                    Lit(Literal::Int(4)).boxed()
                 )
             ))]))
         );
@@ -671,34 +667,32 @@ mod tests {
         assert_eq!(
             parser.parse(program),
             Ok(AST::Program(vec![Item::Statement(Statement::Declaration(
-                (
-                    Identifier("x".to_string()),
-                    Type::Int,
-                    Binary((
-                        Or,
-                        Binary((
-                            And,
-                            Binary((
-                                Equal,
-                                Binary((
-                                    Plus,
-                                    Lit(Literal::Int(3)).boxed(),
-                                    Unary((Minus, Lit(Literal::Int(4)).boxed(),)).boxed(),
-                                ))
-                                .boxed(),
-                                Binary((
-                                    Lesser,
-                                    Lit(Literal::Float(0.3)).boxed(),
-                                    Lit(Literal::Int(5)).boxed(),
-                                ))
-                                .boxed()
-                            ))
+                Identifier("x".to_string()),
+                Type::Int,
+                Binary(
+                    Or,
+                    Binary(
+                        And,
+                        Binary(
+                            Equal,
+                            Binary(
+                                Plus,
+                                Lit(Literal::Int(3)).boxed(),
+                                Unary(Minus, Lit(Literal::Int(4)).boxed()).boxed(),
+                            )
                             .boxed(),
-                            Lit(Literal::Bool(true)).boxed()
-                        ))
+                            Binary(
+                                Lesser,
+                                Lit(Literal::Float(0.3)).boxed(),
+                                Lit(Literal::Int(5)).boxed(),
+                            )
+                            .boxed()
+                        )
                         .boxed(),
-                        Unary((Not, Lit(Literal::Bool(false)).boxed())).boxed()
-                    ))
+                        Lit(Literal::Bool(true)).boxed()
+                    )
+                    .boxed(),
+                    Unary(Not, Lit(Literal::Bool(false)).boxed()).boxed()
                 )
             ))]))
         );
