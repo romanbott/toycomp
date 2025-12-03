@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 
 use crate::{
     lexer::Token,
@@ -131,6 +131,26 @@ pub enum Operator {
     GT,
 }
 
+impl Display for Operator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Operator::Times => todo!(),
+            Operator::Div => todo!(),
+            Operator::Plus => write!(f, "ADD"),
+            Operator::Minus => todo!(),
+            Operator::Not => todo!(),
+            Operator::Equal => todo!(),
+            Operator::NotEqual => todo!(),
+            Operator::And => todo!(),
+            Operator::Or => todo!(),
+            Operator::Lesser => todo!(),
+            Operator::LT => todo!(),
+            Operator::Greater => todo!(),
+            Operator::GT => todo!(),
+        }
+    }
+}
+
 impl TryFrom<&Token> for Operator {
     type Error = TreeBuilderError;
 
@@ -174,6 +194,24 @@ pub enum Expression {
 impl Expression {
     fn boxed(self) -> BExpr {
         Box::new(self)
+    }
+}
+
+impl From<i64> for BExpr {
+    fn from(value: i64) -> Self {
+        Expression::Lit(Literal::Int(value)).boxed()
+    }
+}
+
+impl From<f64> for BExpr {
+    fn from(value: f64) -> Self {
+        Expression::Lit(Literal::Float(value)).boxed()
+    }
+}
+
+impl From<bool> for BExpr {
+    fn from(value: bool) -> Self {
+        Expression::Lit(Literal::Bool(value)).boxed()
     }
 }
 
