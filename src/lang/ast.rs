@@ -208,6 +208,12 @@ impl FromStr for Type {
 #[derive(Debug, PartialEq, Eq)]
 pub struct Identifier(String);
 
+impl From<&str> for Identifier {
+    fn from(ident: &str) -> Self {
+        Identifier(ident.to_string())
+    }
+}
+
 impl FromStr for Identifier {
     type Err = TreeBuilderError;
 
@@ -270,8 +276,6 @@ impl TreeBuilder for ASTBuilder {
             .unwrap_non_terminal()
             .expect("Left side of production should be non-terminal.");
 
-        dbg!(&production);
-
         match prod {
             // LetDeclaration -> let identifier colon type equal Expression
             "Parameter" => {
@@ -318,14 +322,25 @@ impl TreeBuilder for ASTBuilder {
                 }
             }
             "FunctionCall" => {
-                let args = self.stack.pop().unwrap();
-                let ident_node = self.stack.pop().unwrap();
-                match (ident_node, args) {
-                    (AST::Identifier(ident), AST::Arguments(args)) => {
-                        let node = AST::Expression(Expression::FunCall(ident, args));
-                        self.stack.push(node);
+                if production.right.len() == 4 {
+                    let args = self.stack.pop().unwrap();
+                    let ident_node = self.stack.pop().unwrap();
+                    match (ident_node, args) {
+                        (AST::Identifier(ident), AST::Arguments(mut args)) => {
+                            args.reverse();
+                            let node = AST::Expression(Expression::FunCall(ident, args));
+                            self.stack.push(node);
+                        }
+                        _ => unreachable!(),
                     }
-                    _ => unreachable!(),
+                } else {
+                    match self.stack.pop() {
+                        Some(AST::Identifier(ident)) => {
+                            let node = AST::Expression(Expression::FunCall(ident, vec![]));
+                            self.stack.push(node);
+                        }
+                        _ => unreachable!(),
+                    }
                 }
             }
             "Literal" | "Expression" | "Statement" => {
@@ -355,7 +370,6 @@ impl TreeBuilder for ASTBuilder {
             "Factor" | "Term" | "Comparison" | "Equality" | "AndExpression" | "OrExpression" => {
                 if production.right.len() == 3 {
                     let stack_top = self.get3();
-                    dbg!(&stack_top);
                     match stack_top {
                         Some((AST::Expression(left), AST::Operator(o), AST::Expression(right))) => {
                             self.stack.push(AST::Expression(Expression::Binary((
@@ -379,7 +393,6 @@ impl TreeBuilder for ASTBuilder {
                 None => unreachable!("Processing item, empty stack"),
             },
             "LetDeclaration" => {
-                dbg!(&self.stack);
                 let exp_node = self.stack.pop().unwrap();
                 let type_node = self.stack.pop().unwrap();
                 let ident_node = self.stack.pop().unwrap();
@@ -488,9 +501,7 @@ impl TreeBuilder for ASTBuilder {
             }
 
             "FunctionDefinition" => {
-                let block = self.stack.pop().unwrap();
-                let return_type = self.stack.pop().unwrap();
-                let args_or_ident = self.stack.pop().unwrap();
+                let (args_or_ident, return_type, block) = self.get3().unwrap();
 
                 match (args_or_ident, return_type, block) {
                     (AST::Identifier(i), AST::Type(ret), AST::Block(s)) => {
@@ -501,8 +512,9 @@ impl TreeBuilder for ASTBuilder {
                             body: s,
                         })));
                     }
-                    (AST::Params(args), AST::Type(ret), AST::Block(s)) => {
+                    (AST::Params(mut args), AST::Type(ret), AST::Block(s)) => {
                         if let Some(AST::Identifier(i)) = self.stack.pop() {
+                            args.reverse();
                             self.stack.push(AST::Item(Item::FunDef(FunctionDefinition {
                                 ident: i,
                                 return_type: ret,
@@ -520,7 +532,14 @@ impl TreeBuilder for ASTBuilder {
     }
 
     fn to_tree(mut self) -> AST {
-        self.stack.pop().unwrap()
+        match self.stack.pop() {
+            Some(AST::Program(mut items)) => {
+                items.reverse();
+                AST::Program(items)
+            }
+            Some(_) => panic!("The top of the stack is not a program!"),
+            None => panic!("Empty stack!"),
+        }
     }
 }
 
@@ -531,6 +550,7 @@ mod tests {
         ast::{AST, ASTBuilder, Expression, Identifier, Item, Literal, Operator, Statement, Type},
     };
     use Expression::*;
+    use Operator::*;
 
     #[test]
     fn parsing_ast_single_statement() {
@@ -560,15 +580,15 @@ mod tests {
             parser.parse(program),
             Ok(AST::Program(vec![
                 Item::Statement(Statement::Declaration((
-                    Identifier("y".to_string()),
+                    "x".into(),
+                    Type::Int,
+                    Lit(Literal::Int(3))
+                ))),
+                Item::Statement(Statement::Declaration((
+                    "y".into(),
                     Type::Bool,
                     Lit(Literal::Bool(true))
                 ))),
-                Item::Statement(Statement::Declaration((
-                    Identifier("x".to_string()),
-                    Type::Int,
-                    Lit(Literal::Int(3))
-                )))
             ]))
         );
     }
@@ -581,11 +601,7 @@ mod tests {
         assert_eq!(
             parser.parse(program),
             Ok(AST::Program(vec![Item::Statement(Statement::Declaration(
-                (
-                    Identifier("x".to_string()),
-                    Type::Int,
-                    Lit(Literal::Int(-4))
-                )
+                ("x".into(), Type::Int, Lit(Literal::Int(-4)))
             ))]))
         );
     }
@@ -599,7 +615,7 @@ mod tests {
             parser.parse(program),
             Ok(AST::Program(vec![Item::Statement(Statement::Declaration(
                 (
-                    Identifier("x".to_string()),
+                    "x".into(),
                     Type::Int,
                     Unary((Operator::Minus, Lit(Literal::Int(4)).boxed()))
                 )
@@ -616,7 +632,7 @@ mod tests {
             parser.parse(program),
             Ok(AST::Program(vec![Item::Statement(Statement::Declaration(
                 (
-                    Identifier("x".to_string()),
+                    "x".into(),
                     Type::Int,
                     Binary((
                         Operator::Times,
@@ -661,19 +677,19 @@ mod tests {
                     Identifier("x".to_string()),
                     Type::Int,
                     Binary((
-                        Operator::Or,
+                        Or,
                         Binary((
-                            Operator::And,
+                            And,
                             Binary((
-                                Operator::Equal,
+                                Equal,
                                 Binary((
-                                    Operator::Plus,
+                                    Plus,
                                     Lit(Literal::Int(3)).boxed(),
-                                    Unary((Operator::Minus, Lit(Literal::Int(4)).boxed(),)).boxed(),
+                                    Unary((Minus, Lit(Literal::Int(4)).boxed(),)).boxed(),
                                 ))
                                 .boxed(),
                                 Binary((
-                                    Operator::Lesser,
+                                    Lesser,
                                     Lit(Literal::Float(0.3)).boxed(),
                                     Lit(Literal::Int(5)).boxed(),
                                 ))
@@ -683,7 +699,7 @@ mod tests {
                             Lit(Literal::Bool(true)).boxed()
                         ))
                         .boxed(),
-                        Unary((Operator::Not, Lit(Literal::Bool(false)).boxed())).boxed()
+                        Unary((Not, Lit(Literal::Bool(false)).boxed())).boxed()
                     ))
                 )
             ))]))
@@ -709,56 +725,54 @@ mod tests {
         let ast = parser.parse(program);
 
         dbg!(&ast);
-        assert!(ast.is_ok())
+        assert!(ast.is_ok());
     }
-    //
-    //     #[test]
-    //     fn parsing_basic_tree_builder_exhaustive_check() {
-    //         let program = "fn main(x: int) -> void {
-    //     let x: float = -3.0;
-    //     let y: int = 1;
-    //     let z: int = y - 3;
-    //     if (z == y) {
-    //         x = x - 1;
-    //     } else {
-    //         while (true) {
-    //             return false;
-    //         };
-    //     };
-    // let x: bool = true;
-    // let a: int = -y;
-    //
-    // let y: bool = true & false | (true & false);
-    //
-    // while true {
-    //     x = y;
-    // };
-    //
-    // if true {
-    //     x = y;
-    // };
-    //
-    // if (true) {
-    //     x = y;
-    // };
-    //
-    // if (!true) {
-    //     x = y;
-    // };
-    //
-    // if true {
-    //     x = y;
-    // } else {
-    //     x = y;
-    // };
-    //
-    // let y: bool = !(x == y) & false | (true & false);
-    //
-    // }";
-    //         let parser: Parser<BasicTreeBuilder, Node> = Parser::new(LEXER, GRAMMAR);
-    //
-    //         let ast = parser.parse(program);
-    //
-    //         assert!(ast.is_ok())
-    //     }
+
+    #[test]
+    fn parsing_ast_builder_exhaustive_check() {
+        let program = "fn main(x: int, y: bool) -> void {
+        let x: float = -3.0;
+        let y: int = 1;
+        let z: int = y - 3;
+        if (z == y) {
+            x = x - 1;
+        } else {
+            while (true) {
+                return false;
+            };
+        };
+    let x: bool = g();
+    let a: int = f(x);
+
+    let y: bool = true & false | (true & false);
+
+    while true {
+        x = f(x,y,z);
+    };
+
+    if true {
+        x = y;
+        x = f(x,y,g(x), x + y);
+    };
+
+    if (!true) {
+        x = y;
+    };
+
+    if true {
+        x = y;
+    } else {
+        x = y;
+    };
+
+    let y: bool = !(x == y) & false | (true & false);
+
+    }";
+        let parser: Parser<ASTBuilder, AST> = Parser::new();
+
+        let ast = parser.parse(program);
+
+        assert!(ast.is_ok());
+        dbg!(ast.unwrap());
+    }
 }
