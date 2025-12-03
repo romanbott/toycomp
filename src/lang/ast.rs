@@ -55,6 +55,16 @@ pub enum Literal {
     Float(f64),
 }
 
+impl Display for Literal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Literal::Int(v) => write!(f, "{v}"),
+            Literal::Bool(v) => write!(f, "{v}"),
+            Literal::Float(v) => write!(f, "{v}"),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub struct ElseClause {
     pub block: Vec<Statement>,
@@ -81,9 +91,10 @@ pub enum Operator {
     And,
     Or,
     Lesser,
-    LT,
+    LTE,
     Greater,
-    GT,
+    GTE,
+    Mod,
 }
 
 impl TryFrom<&Token> for Literal {
@@ -111,19 +122,34 @@ impl TryFrom<&Token> for Literal {
 impl Display for Operator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Operator::Times => todo!(),
-            Operator::Div => todo!(),
             Operator::Plus => write!(f, "ADD"),
-            Operator::Minus => todo!(),
-            Operator::Not => todo!(),
-            Operator::Equal => todo!(),
-            Operator::NotEqual => todo!(),
-            Operator::And => todo!(),
-            Operator::Or => todo!(),
-            Operator::Lesser => todo!(),
-            Operator::LT => todo!(),
-            Operator::Greater => todo!(),
-            Operator::GT => todo!(),
+            // MUL
+            Operator::Times => write!(f, "MUL"),
+            // DIV
+            Operator::Div => write!(f, "DIV"),
+            // SUB
+            Operator::Minus => write!(f, "SUB"),
+            // NOT
+            Operator::Not => write!(f, "NOT"),
+            // EQ
+            Operator::Equal => write!(f, "EQ"),
+            // NEQ
+            Operator::NotEqual => write!(f, "NEQ"),
+            // AND
+            Operator::And => write!(f, "AND"),
+            // OR
+            Operator::Or => write!(f, "OR"),
+            // LT
+            Operator::Lesser => write!(f, "LT"),
+            // LTE
+            Operator::LTE => write!(f, "LTE"),
+            // GT
+            Operator::Greater => write!(f, "GT"),
+            // GTE
+            Operator::GTE => write!(f, "GTE"),
+            // MOD
+            Operator::Mod => write!(f, "MOD"),
+            // MOD
         }
     }
 }
@@ -137,8 +163,8 @@ impl TryFrom<&Token> for Operator {
             ("COMPARISON_OP", "!=") => Operator::NotEqual,
             ("COMPARISON_OP", "<") => Operator::Lesser,
             ("COMPARISON_OP", ">") => Operator::Greater,
-            ("COMPARISON_OP", "<=") => Operator::LT,
-            ("COMPARISON_OP", ">=") => Operator::GT,
+            ("COMPARISON_OP", "<=") => Operator::LTE,
+            ("COMPARISON_OP", ">=") => Operator::GTE,
             ("TIMES_DIV", "*") => Operator::Times,
             ("TIMES_DIV", "/") => Operator::Div,
             ("PLUS", "+") => Operator::Plus,
@@ -177,6 +203,12 @@ impl Expression {
 impl From<i64> for BExpr {
     fn from(value: i64) -> Self {
         Expression::Lit(Literal::Int(value)).boxed()
+    }
+}
+
+impl From<i64> for Expression {
+    fn from(value: i64) -> Self {
+        Expression::Lit(Literal::Int(value))
     }
 }
 
