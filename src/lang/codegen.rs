@@ -1,9 +1,17 @@
-use crate::lang::ast::{AST, ElseClause, Expression, Item, Literal, Operator, Statement};
+use crate::lang::ast::{
+    AST, ElseClause, Expression, Identifier, Item, Literal, Operator, Statement,
+};
 use std::io::{self, Write};
 
 pub struct Codegen {
     temp_counter: usize,
     label_counter: usize,
+}
+
+const BUILT_INS: [&str; 7] = ["print", "pixel", "input", "time", "mod", "pow", "poll_key"];
+
+fn is_builtin(ident: &Identifier) -> bool {
+    BUILT_INS.iter().any(|&target| ident.0 == target)
 }
 
 impl Codegen {
@@ -70,15 +78,11 @@ impl Codegen {
                 writeln!(out, "SUB 0 {} {}", a, dest)?;
                 Ok(dest)
             }
-            // TODO:
-            // handle std functions:
-            // - print
-            // - input
-            // - pixel
-            // - mod
-            // - time
-            // - key
             Expression::FunCall(ident, args) => {
+                if is_builtin(ident) {
+                    return self.gen_builtin(ident, args, out);
+                }
+
                 let ret = self.make_temp();
                 self.emit_var(out, &ret)?;
 
@@ -165,6 +169,8 @@ impl Codegen {
     fn gen_program<W: Write>(&mut self, program: AST, out: &mut W) -> io::Result<()> {
         match program {
             AST::Program(items) => {
+                // Declares global variable for builin returns
+                writeln!(out, "VAR _BUILT_IN_GLOBAL_RET")?;
                 for item in items {
                     self.gen_item(item, out)?
                 }
@@ -174,6 +180,63 @@ impl Codegen {
             }
         }
         Ok(())
+    }
+
+    fn gen_builtin<W: Write>(
+        &mut self,
+        ident: &Identifier,
+        args: &[Expression],
+        out: &mut W,
+    ) -> io::Result<String> {
+        match (ident.0.as_str(), args) {
+            ("print", [expression]) => {
+                let t = self.gen_expr(expression, out)?;
+                writeln!(out, "PRINT {}", t)?;
+            }
+            ("pixel", [e1, e2, e3]) => {
+                let a = self.gen_expr(e1, out)?;
+                let b = self.gen_expr(e2, out)?;
+                let c = self.gen_expr(e3, out)?;
+                writeln!(out, "PIXEL {} {} {}", a, b, c)?;
+            }
+            ("input", []) => {
+                let ret = self.make_temp();
+                self.emit_var(out, &ret)?;
+                writeln!(out, "INPUT {}", ret)?;
+                return Ok(ret);
+            }
+            ("time", []) => {
+                let ret = self.make_temp();
+                self.emit_var(out, &ret)?;
+                writeln!(out, "TIME {}", ret)?;
+                return Ok(ret);
+            }
+            ("mod", [e1, e2]) => {
+                let ret = self.make_temp();
+                self.emit_var(out, &ret)?;
+                let a = self.gen_expr(e1, out)?;
+                let b = self.gen_expr(e2, out)?;
+                writeln!(out, "MOD {} {} {}", a, b, ret)?;
+                return Ok(ret);
+            }
+            ("pow", [e1, e2]) => {
+                let ret = self.make_temp();
+                self.emit_var(out, &ret)?;
+                let a = self.gen_expr(e1, out)?;
+                let b = self.gen_expr(e2, out)?;
+                writeln!(out, "POW {} {} {}", a, b, ret)?;
+                return Ok(ret);
+            }
+            ("poll_key", [e]) => {
+                let ret = self.make_temp();
+                self.emit_var(out, &ret)?;
+                let key_code = self.gen_expr(e, out)?;
+                writeln!(out, "KEY {} {}", key_code, ret)?;
+                return Ok(ret);
+            }
+            _ => {}
+        }
+        Ok("_BUILT_IN_GLOBAL_RET".to_string())
     }
 }
 
@@ -218,6 +281,43 @@ mod tests {
         assert_eq!(
             "VAR _t1\nVAR _t2\nASSIGN 1 _t2\nPARAM _t2\nVAR _t3\nASSIGN 2 _t3\nPARAM _t3\nGOSUB f _t1\n",
             result_string.unwrap().as_str()
+        )
+    }
+
+    #[test]
+    fn builtin_gen() {
+        let expr = Expression::FunCall("pixel".into(), vec![1.into(), 2.into(), 1.into()]);
+
+        let mut cg = Codegen::new();
+
+        let mut buffer: Vec<u8> = Vec::new();
+        _ = cg.gen_expr(&expr, &mut buffer);
+
+        let result_string = String::from_utf8(buffer);
+
+        assert_eq!(
+            "VAR _t1\nASSIGN 1 _t1\nVAR _t2\nASSIGN 2 _t2\nVAR _t3\nASSIGN 1 _t3\nPIXEL _t1 _t2 _t3\n",
+            result_string.unwrap().as_str()
+        )
+    }
+
+    #[test]
+    fn ass_stmt_gen() {
+        let stmt = Statement::Assignment(
+            "x".into(),
+            Expression::FunCall("pixel".into(), vec![1.into(), 2.into(), 1.into()]),
+        );
+
+        let mut cg = Codegen::new();
+
+        let mut buffer: Vec<u8> = Vec::new();
+        _ = cg.gen_stmt(stmt, &mut buffer);
+
+        let result_string = String::from_utf8(buffer).unwrap();
+
+        assert_eq!(
+            "VAR _t1\nASSIGN 1 _t1\nVAR _t2\nASSIGN 2 _t2\nVAR _t3\nASSIGN 1 _t3\nPIXEL _t1 _t2 _t3\nASSIGN _BUILT_IN_GLOBAL_RET x\n",
+            result_string
         )
     }
 
