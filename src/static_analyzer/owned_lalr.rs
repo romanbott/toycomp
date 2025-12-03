@@ -42,8 +42,8 @@ impl<'a> From<&Symbol<'a>> for OSymbol {
                 value: "".to_string(),
             },
             Symbol::End => OSymbol {
-                kind: "End".to_string(),
-                value: "".to_string(),
+                kind: "<END>".to_string(),
+                value: "<END>".to_string(),
             },
             Symbol::Epsilon => OSymbol {
                 kind: "Epsilon".to_string(),
@@ -100,6 +100,11 @@ impl<'a> From<&LALRAction<'a>> for OLALRAction {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 struct Key(usize, String, String);
+pub struct Key {
+    pub num: usize,
+    pub s1: String,
+    pub s2: String,
+}
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct KeyRef<'a> {
@@ -145,7 +150,14 @@ impl<'a> From<&LALRAutomaton<'a>> for OLALRAutomaton {
             .iter()
             .map(|((n, s), v)| {
                 let symbol: (String, String) = s.into();
-                (Key(*n, symbol.0, symbol.1), v.into())
+                (
+                    Key {
+                        num: *n,
+                        s1: symbol.0,
+                        s2: symbol.1,
+                    },
+                    v.into(),
+                )
             })
             .collect();
 
@@ -177,11 +189,21 @@ impl OLALRAutomaton {
         while let Some(token) = input.last() {
             let current_state = state_stack.last().expect("Empty state stack!");
 
-            let key = KeyRef {
-                num: *current_state,
-                s1: "Terminal",
-                s2: &token.tag,
+            // TODO: Cleaup
+            let key = if token.tag == "<END>" {
+                Key {
+                    num: *current_state,
+                    s1: "<END>".to_string(),
+                    s2: token.tag.to_string(),
+                }
+            } else {
+                Key {
+                    num: *current_state,
+                    s1: "Terminal".to_string(),
+                    s2: token.tag.to_string(),
+                }
             };
+
             let action = self.table.get(&key);
 
             match action {
@@ -198,10 +220,10 @@ impl OLALRAutomaton {
 
                     let current_state = state_stack.last().expect("Empty state stack!");
 
-                    let key = KeyRef {
+                    let key = Key {
                         num: *current_state,
-                        s1: &production.left.kind,
-                        s2: &production.left.value,
+                        s1: production.left.kind.to_string(),
+                        s2: production.left.value.to_string(),
                     };
 
                     let action = self.table.get(&key).unwrap();
@@ -218,10 +240,10 @@ impl OLALRAutomaton {
                         .terminals
                         .iter()
                         .filter(|s| {
-                            let key = KeyRef {
+                            let key = Key {
                                 num: *current_state,
-                                s1: &s.kind,
-                                s2: &s.value,
+                                s1: s.kind.to_string(),
+                                s2: s.value.to_string(),
                             };
 
                             self.table.get(&key).is_some()
@@ -237,5 +259,36 @@ impl OLALRAutomaton {
             }
         }
         Err(ParseError::EndWhileParsing)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::static_analyzer::{BasicTreeBuilder, Grammar};
+
+    use super::*;
+    #[test]
+    fn lalr_parse() {
+        let grammar = "S -> B B\nB -> b B|d";
+        let parsed_grammar = Grammar::from_str(grammar).unwrap();
+        let augmented = parsed_grammar.augment();
+
+        let lalr = LALRAutomaton::from_grammar(&augmented);
+
+        let olalr: OLALRAutomaton = (&lalr).into();
+
+        let mut should_accept: Vec<Token> = vec![
+            ("b", "").into(),
+            ("d", "").into(),
+            ("b", "").into(),
+            ("d", "").into(),
+        ];
+
+        let basic_stack = BasicTreeBuilder::new();
+        let res = olalr.parse(&mut should_accept, basic_stack);
+        dbg!(lalr);
+        dbg!(olalr);
+        dbg!(&res);
+        assert!(res.is_ok());
     }
 }
