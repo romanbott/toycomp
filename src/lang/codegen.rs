@@ -166,7 +166,7 @@ impl Codegen {
         Ok(())
     }
 
-    fn gen_program<W: Write>(&mut self, program: AST, out: &mut W) -> io::Result<()> {
+    pub fn gen_program<W: Write>(&mut self, program: AST, out: &mut W) -> io::Result<()> {
         match program {
             AST::Program(items) => {
                 // Declares global variable for builin returns
