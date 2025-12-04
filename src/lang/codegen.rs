@@ -241,7 +241,7 @@ impl Codegen {
             }
             _ => {}
         }
-        Ok("_BUILT_IN_GLOBAL_RET".to_string())
+        Ok("_GLOBAL_RETURN".to_string())
     }
 }
 
@@ -416,7 +416,7 @@ impl FunGen {
         match program {
             AST::Program(items) => {
                 // Declares global variable for builin returns
-                writeln!(out, "VAR _BUILT_IN_GLOBAL_RET")?;
+                writeln!(out, "VAR _GLOBAL_RETURN")?;
                 for item in items {
                     self.gen_item(item, out)?
                 }
@@ -482,7 +482,7 @@ impl FunGen {
             }
             _ => {}
         }
-        Ok("_BUILT_IN_GLOBAL_RET".to_string())
+        Ok("_GLOBAL_RETURN".to_string())
     }
 }
 
