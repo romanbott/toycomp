@@ -4,7 +4,7 @@ use std::{
     io::{self, BufWriter, Write},
     path::PathBuf,
 };
-use toycomp::{AST, ASTBuilder, Codegen};
+use toycomp::{AST, ASTBuilder, Codegen, TypeChecker};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -19,6 +19,8 @@ enum Commands {
     Parse(CommandArgs),
     /// Compile the input file and output FIS-25 intermediate code
     Compile(CommandArgs),
+    /// Type checks the input file
+    Check(CommandArgs),
 }
 
 #[derive(Args)]
@@ -41,6 +43,9 @@ fn main() {
         }
         Commands::Compile(args) => {
             compile(&args.input, args.output.as_ref());
+        }
+        Commands::Check(args) => {
+            check(&args.input);
         }
     }
 }
@@ -73,6 +78,31 @@ fn parse(input_path: &PathBuf, output_path: Option<&PathBuf>) -> io::Result<()> 
             write_debug(&ast, writer)
         }
     }
+}
+
+fn check(input_path: &PathBuf) -> io::Result<()> {
+    println!("Reading from: {}", input_path.display());
+    let input_content = fs::read_to_string(input_path)?;
+
+    let parser: toycomp::Parser<ASTBuilder, AST> = toycomp::Parser::new();
+
+    let ast = parser.parse(&input_content);
+
+    let ast = match ast {
+        Ok(ast) => ast,
+        Err(e) => panic!("{:?}", e),
+    };
+
+    let mut checker = TypeChecker::new();
+
+    match checker.type_check(ast) {
+        Ok(_) => print!("Correctly typed!"),
+        Err(e) => {
+            dbg!(e);
+        }
+    };
+
+    Ok(())
 }
 
 fn write_debug<T: std::fmt::Debug, W: Write + Sized>(

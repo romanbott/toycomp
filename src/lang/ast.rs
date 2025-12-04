@@ -20,12 +20,18 @@ pub enum AST {
 #[derive(Debug, PartialEq, Eq)]
 pub struct Identifier(pub String);
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Type {
     Int,
     Float,
     Bool,
     Void,
+}
+
+impl Type {
+    pub fn is_bool(&self) -> bool {
+        matches!(self, Type::Bool)
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -53,6 +59,16 @@ pub enum Literal {
     Int(i64),
     Bool(bool),
     Float(f64),
+}
+
+impl Literal {
+    pub fn get_type(&self) -> Type {
+        match self {
+            Literal::Int(_) => Type::Int,
+            Literal::Bool(_) => Type::Bool,
+            Literal::Float(_) => Type::Float,
+        }
+    }
 }
 
 impl Display for Literal {
