@@ -24,9 +24,9 @@ COMMA->,
 TIMES_DIV->\\*|/
 TYPE->int|float|bool|void
 WHILE->while
-IDENTIFIER ->(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|_)(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|0|1|2|3|4|5|6|7|8|9)*
+IDENTIFIER ->(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|_)(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|_|0|1|2|3|4|5|6|7|8|9)*
 FLOAT_LITERAL->-?(0|1|2|3|4|5|6|7|8|9)+.(0|1|2|3|4|5|6|7|8|9)*
-INTEGER_LITERAL->-?(1|2|3|4|5|6|7|8|9)(0|1|2|3|4|5|6|7|8|9)*
+INTEGER_LITERAL->-?((1|2|3|4|5|6|7|8|9)(0|1|2|3|4|5|6|7|8|9)*|0)
 WHITE_SPACE ->\\t|\\r| |\\n";
 
 pub static LEXER: LazyLock<Lexer> = LazyLock::new(|| LEXER_STRING.parse().unwrap());
