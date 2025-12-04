@@ -1,0 +1,11 @@
+let x: int = 0;
+let y: int = 0;
+
+while (y < 64) {
+  while (x < 64) {
+    _ = pixel(x,y, mod(x+y, 2));
+    x = x + 1;
+  };
+  y = y + 1;
+  x = 0;
+};

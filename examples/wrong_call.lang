@@ -1,0 +1,8 @@
+fn func1(x: int, y: bool) -> bool {
+  if x == 0 {
+    return y;
+  };
+  return !y;
+}
+
+let res: bool = func1(1,1);
