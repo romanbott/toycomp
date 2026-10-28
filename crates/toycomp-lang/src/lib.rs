@@ -8,6 +8,7 @@ pub use lang::ASTBuilder;
 pub use lang::Codegen;
 pub use lang::Expression;
 pub use lang::FunctionDefinition;
+pub use lang::GRAMMAR;
 pub use lang::Item;
 pub use lang::Operator;
 pub use lang::Parser;

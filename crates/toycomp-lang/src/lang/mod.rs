@@ -14,4 +14,5 @@ pub use ast::Statement;
 pub use ast::Type;
 pub use ast_builder::ASTBuilder;
 pub use codegen::Codegen;
+pub use grammar::GRAMMAR;
 pub use parser::Parser;

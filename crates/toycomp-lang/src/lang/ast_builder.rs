@@ -1,4 +1,4 @@
-use toycomp_syntax::{Production, TreeBuilder, TreeBuilderError};
+use toycomp_syntax::{TreeBuilder, TreeBuilderError};
 
 use crate::lang::ast::{AST, ElseClause, Expression, FunctionDefinition, Item, Param, Statement};
 

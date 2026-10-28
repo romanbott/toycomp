@@ -1,8 +1,6 @@
-use crate::lang::ast::{
-    AST, ElseClause, Expression, Identifier, Item, Literal, Operator, Statement,
-};
+use crate::lang::ast::{AST, ElseClause, Expression, Identifier, Item, Operator, Statement};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     io::{self, Write},
 };
 

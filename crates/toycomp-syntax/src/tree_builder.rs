@@ -1,4 +1,4 @@
-use crate::{grammar::Production, lexer::Token};
+use crate::lexer::Token;
 
 #[derive(Debug)]
 pub enum TreeBuilderError {

@@ -1,6 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
-    fmt::{Display, Formatter, write},
+    fmt::{Display, Formatter},
     vec,
 };
 

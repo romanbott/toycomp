@@ -101,7 +101,9 @@ impl<'a> From<&LALRAction<'a>> for OLALRAction {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Encode, Decode)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Encode, Decode,
+)]
 pub struct Key {
     pub num: usize,
     pub s1: String,
