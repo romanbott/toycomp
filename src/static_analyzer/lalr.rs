@@ -187,19 +187,17 @@ impl<'a> LALRAutomaton<'a> {
                 }
             }
 
-            for state in &lr_aut.states {
-                for item in &state.0 {
-                    for terminal in &terminals {
-                        if let Some(reduced) = item.reduce(terminal) {
-                            let action = LALRAction::Reduce(reduced);
+            for item in &state.0 {
+                for terminal in &terminals {
+                    if let Some(reduced) = item.reduce(terminal) {
+                        let action = LALRAction::Reduce(reduced);
 
-                            if let Some(old) = table.insert(
-                                (*state_to_core.get(&state).unwrap(), terminal.clone()),
-                                action.clone(),
-                            ) && old != action
-                            {
-                                panic!("Conflict found! {:?}", old)
-                            }
+                        if let Some(old) = table.insert(
+                            (*state_to_core.get(&state).unwrap(), terminal.clone()),
+                            action.clone(),
+                        ) && old != action
+                        {
+                            panic!("Conflict found! {:?}", old)
                         }
                     }
                 }
