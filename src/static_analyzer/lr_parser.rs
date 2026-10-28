@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 use std::fmt::Debug;
 
 use crate::static_analyzer::{
@@ -93,7 +93,7 @@ impl<'a> LR1Item<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
 pub struct LR1AutomatonState<'a>(pub BTreeSet<LR1Item<'a>>);
 
 impl LR1AutomatonState<'_> {
@@ -105,7 +105,7 @@ impl LR1AutomatonState<'_> {
 
 #[derive(Debug)]
 pub struct LR1Automaton<'a> {
-    pub states: BTreeSet<LR1AutomatonState<'a>>,
+    pub states: HashSet<LR1AutomatonState<'a>>,
     pub initial: LR1AutomatonState<'a>,
 }
 

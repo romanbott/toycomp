@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt;
 
 use crate::lexer::Token;
@@ -456,7 +456,7 @@ impl<'a> Grammar<'a> {
 
         let mut worklist = BTreeSet::from([self.lr1_closure(&initial_item)]);
 
-        let mut states = BTreeSet::new();
+        let mut states = HashSet::new();
 
         while let Some(state) = worklist.pop_first() {
             if state.0.is_empty() {
