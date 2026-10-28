@@ -129,20 +129,15 @@ impl<'a> LALRAutomaton<'a> {
         let lr_aut = grammar.get_lr1_automaton();
 
         let cores: BTreeSet<Core> = lr_aut.states.iter().map(|s| s.into()).collect();
-        let cores: Vec<_> = cores.iter().collect();
+        let core_index: BTreeMap<&Core, usize> =
+            cores.iter().enumerate().map(|(i, c)| (c, i)).collect();
 
         let state_to_core: BTreeMap<_, _> = lr_aut
             .states
             .iter()
             .map(|state| {
-                let core_index = cores
-                    .iter()
-                    .enumerate()
-                    .find_map(|(i, c)| {
-                        let state_core: Core = state.into();
-                        if *c == &state_core { Some(i) } else { None }
-                    })
-                    .unwrap();
+                let state_core: Core = state.into();
+                let core_index = *core_index.get(&state_core).unwrap();
                 (state, core_index)
             })
             .collect();
