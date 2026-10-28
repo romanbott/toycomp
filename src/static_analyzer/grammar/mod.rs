@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt;
+use std::sync::OnceLock;
 
 use crate::lexer::Token;
 use crate::static_analyzer::lr_parser::{LR1Automaton, LR1AutomatonState, LR1Item};
@@ -118,6 +119,10 @@ pub struct Grammar<'a> {
     pub productions: Vec<Production<'a>>,
     /// The starting non-terminal symbol.
     pub start: Symbol<'a>,
+    /// Memoized FIRST sets. Computing them is a fixpoint over every
+    /// production, so the LR(1) construction must not recompute them for
+    /// every item it closes over.
+    first: OnceLock<BTreeMap<Symbol<'a>, BTreeSet<Symbol<'a>>>>,
 }
 
 /// An enumeration of possible errors that can occur during grammar parsing.
@@ -247,6 +252,7 @@ impl<'a> Grammar<'a> {
             terminals,
             productions,
             start: Symbol::NonTerminal(start_char),
+            first: OnceLock::new(),
         })
     }
 
@@ -260,7 +266,11 @@ impl<'a> Grammar<'a> {
     /// A `BTreeMap` where keys are `Symbol`s and values are `BTreeSet`s of
     /// `Symbol`s representing their FIRST sets.
     #[allow(dead_code)]
-    pub fn get_first(&self) -> BTreeMap<Symbol<'_>, BTreeSet<Symbol<'_>>> {
+    pub fn get_first(&self) -> &BTreeMap<Symbol<'a>, BTreeSet<Symbol<'a>>> {
+        self.first.get_or_init(|| self.compute_first())
+    }
+
+    fn compute_first(&self) -> BTreeMap<Symbol<'a>, BTreeSet<Symbol<'a>>> {
         let mut curr_map = BTreeMap::new();
 
         // Initialize FIRST sets for terminals and non-terminals.
@@ -494,6 +504,7 @@ impl<'a> Grammar<'a> {
             terminals: self.terminals.clone(),
             productions: augmented_productions,
             start: Symbol::Start,
+            first: OnceLock::new(),
         }
     }
 }
