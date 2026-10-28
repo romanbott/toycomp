@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
-use crate::{automata::NDFA, lexer::Lexer};
+use crate::automata::NDFA;
 
 use super::tagged_ndfa::TaggedNDFA;
 
@@ -350,13 +350,6 @@ impl From<TaggedNDFA> for TaggedDFA {
             initial_state,
             final_states,
         }
-    }
-}
-
-impl From<&Lexer> for TaggedDFA {
-    fn from(lexer: &Lexer) -> Self {
-        let ndfa: TaggedNDFA = lexer.into();
-        ndfa.into()
     }
 }
 

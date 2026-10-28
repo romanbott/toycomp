@@ -5,5 +5,6 @@ mod tagged_ndfa;
 
 pub use dfa::DFA;
 pub use dfa::TaggedDFA;
-use ndfa::Arrow;
 pub use ndfa::NDFA;
+pub(crate) use ndfa::{Arrow, NDTable};
+pub(crate) use tagged_ndfa::TaggedNDFA;

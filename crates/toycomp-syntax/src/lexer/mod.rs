@@ -1,6 +1,9 @@
-use std::{fmt, str::FromStr};
+use std::{collections::BTreeMap, fmt, str::FromStr};
 
-use crate::automata::TaggedDFA;
+use crate::{
+    automata::{Arrow, NDFA, NDTable, TaggedDFA, TaggedNDFA},
+    grammar::Symbol,
+};
 
 #[derive(Debug, Clone)]
 pub struct Pattern {
@@ -113,6 +116,70 @@ impl Lexer {
         }
 
         Ok(tokens)
+    }
+}
+
+impl From<&Lexer> for TaggedNDFA {
+    fn from(lexer: &Lexer) -> Self {
+        let tagged_ndfas: Vec<(String, NDFA)> = lexer
+            .patterns
+            .iter()
+            .map(|p| (p.tag.clone(), NDFA::from_regex(p.regex.as_str())))
+            .collect();
+
+        let mut shifted_tables: Vec<Vec<Vec<Arrow>>> = Vec::new();
+        let mut total_shift = 0;
+        let mut starting_states: Vec<usize> = Vec::new();
+        let mut final_states: BTreeMap<usize, String> = BTreeMap::new();
+
+        for (tag, ndfa) in tagged_ndfas {
+            starting_states.push(ndfa.initial_state + total_shift);
+            final_states.insert(ndfa.final_state + total_shift, tag);
+
+            shifted_tables.push(
+                ndfa.table
+                    .0
+                    .iter()
+                    .map(|row| {
+                        row.iter()
+                            .map(|arrow| arrow.move_target(total_shift))
+                            .collect()
+                    })
+                    .collect(),
+            );
+
+            total_shift += ndfa.table.0.len();
+        }
+
+        let mut table = shifted_tables.concat();
+
+        // Add epsilon transitions from a new initial state to every pattern's
+        // initial state.
+        table.push(starting_states.iter().map(|s| Arrow::Epsilon(*s)).collect());
+
+        let initial_state = table.len() - 1;
+
+        TaggedNDFA {
+            table: NDTable(table),
+            initial_state,
+            final_states,
+        }
+    }
+}
+
+impl From<&Lexer> for TaggedDFA {
+    fn from(lexer: &Lexer) -> Self {
+        let ndfa: TaggedNDFA = lexer.into();
+        ndfa.into()
+    }
+}
+
+impl<'a> From<&'a Token> for Symbol<'a> {
+    fn from(value: &'a Token) -> Self {
+        if value.tag == "<END>" {
+            return Symbol::End;
+        }
+        Symbol::Terminal(value.tag.as_str())
     }
 }
 

@@ -2,7 +2,6 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt;
 use std::sync::OnceLock;
 
-use crate::lexer::Token;
 use crate::lr_parser::{LR1Automaton, LR1AutomatonState, LR1Item};
 
 /// Represents a symbol in a formal grammar.
@@ -30,15 +29,6 @@ impl<'a> Into<(String, String)> for &Symbol<'a> {
             Symbol::Start => ("Start".to_string(), "".to_string()),
             Symbol::Epsilon => ("Epsilon".to_string(), "".to_string()),
         }
-    }
-}
-
-impl<'a> From<&'a Token> for Symbol<'a> {
-    fn from(value: &'a Token) -> Self {
-        if value.tag == "<END>" {
-            return Symbol::End;
-        }
-        Symbol::Terminal(value.tag.as_str())
     }
 }
 

@@ -1,9 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::{
-    automata::{Arrow, NDFA, ndfa::NDTable},
-    lexer::Lexer,
-};
+use crate::automata::{Arrow, NDFA, NDTable};
 
 /// Represents a Tagged Non-deterministic Finite Automaton (NFA).
 /// The automaton is defined by a table of transitions, the starting state, and the final state.
@@ -14,57 +11,6 @@ pub struct TaggedNDFA {
     pub table: NDTable,
     pub initial_state: usize,
     pub final_states: BTreeMap<usize, String>,
-}
-
-impl From<&Lexer> for TaggedNDFA {
-    fn from(lexer: &Lexer) -> Self {
-        let tagged_ndfas: Vec<(String, NDFA)> = lexer
-            .patterns
-            .iter()
-            .map(|p| (p.tag.clone(), NDFA::from_regex(p.regex.as_str())))
-            .collect();
-
-        let mut shifted_tables: Vec<Vec<Vec<Arrow>>> = Vec::new();
-
-        let mut total_shift = 0;
-
-        let mut starting_states: Vec<usize> = Vec::new();
-        let mut final_states: BTreeMap<usize, String> = BTreeMap::new();
-
-        for (tag, ndfa) in tagged_ndfas {
-            starting_states.push(ndfa.initial_state + total_shift);
-
-            final_states.insert(ndfa.final_state + total_shift, tag);
-
-            shifted_tables.push(
-                ndfa.table
-                    .0
-                    .iter()
-                    .map(|row| {
-                        row.iter()
-                            .map(|arrow| arrow.move_target(total_shift))
-                            .collect()
-                    })
-                    .collect(),
-            );
-
-            total_shift += ndfa.table.0.len();
-        }
-
-        let mut table = shifted_tables.concat();
-
-        // Adds epsilon transitions from a new initial state to all the initial states of
-        // the collected NDFAs
-        table.push(starting_states.iter().map(|s| Arrow::Epsilon(*s)).collect());
-
-        let initial_state = table.len() - 1;
-
-        TaggedNDFA {
-            table: NDTable(table),
-            initial_state,
-            final_states,
-        }
-    }
 }
 
 impl TaggedNDFA {
