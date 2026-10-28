@@ -9,9 +9,9 @@ A small compiler for a toy imperative language, targeting the FIS-25 virtual mac
   knows nothing about the toy language.
 - `crates/toycomp-lang` — the toy language itself: AST, lexer/grammar specs,
   type checker and code generator. Its `build.rs` compiles
-  `spec/toy.lang.lex` and `spec/toy.lang.grammar` into the lexer DFA and the
-  LALR table in `$OUT_DIR`, so the compiler does not build them at startup and
-  there is no artifact to check in.
+  `spec/toy.lang.lex` and `spec/toy.lang.grammar` into Rust source tables in
+  `$OUT_DIR`, so the compiler neither builds them at startup nor decodes a
+  binary artifact.
 - `crates/toycomp-cli` — the binaries: `compiler`, `lexgen`, `parsergen` and
   `regex-cli`.
 
@@ -33,8 +33,10 @@ cargo run --release --bin lexgen    -- crates/toycomp-lang/spec/toy.lang.lex --e
 cargo run --release --bin regex-cli -- 'a+b' 'aaab'
 ```
 
-`parsergen` and `lexgen` also support `--emit bin --output <file>` and
-`lexgen --emit dot`. They depend only on `toycomp-syntax`.
+`parsergen` and `lexgen` also support `--emit rs --output <file>`:
+they print the same `Table`/`StaticDFA` source that `build.rs` generates.
+`lexgen --emit dot` prints the minimized DFA. They depend only on
+`toycomp-syntax`.
 
 ## About the implemented language
 
