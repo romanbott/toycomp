@@ -180,6 +180,10 @@ impl Dfa for StaticDFA {
 }
 
 /// Owned DFA data, used by the generators.
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize, bincode::Encode, bincode::Decode)
+)]
 pub struct DfaData {
     pub initial_state: u16,
     pub transitions: Vec<Vec<(char, u16)>>,

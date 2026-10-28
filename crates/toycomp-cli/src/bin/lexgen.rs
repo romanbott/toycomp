@@ -13,7 +13,7 @@ struct Cli {
     #[arg(long, value_enum, default_value_t = Format::Stats)]
     emit: Format,
 
-    /// Output file. Defaults to stdout.
+    /// Output file. Defaults to stdout for text formats; required for bin.
     #[arg(long, short)]
     output: Option<PathBuf>,
 }
@@ -23,6 +23,8 @@ enum Format {
     Stats,
     Dot,
     Rs,
+    #[cfg(feature = "bin-tables")]
+    Bin,
 }
 
 fn main() {
@@ -46,6 +48,16 @@ fn main() {
                 Some(path) => fs::write(path, source).expect("write lexer source"),
                 None => print!("{source}"),
             }
+        }
+        #[cfg(feature = "bin-tables")]
+        Format::Bin => {
+            let data = DfaData::from_tagged(&dfa);
+            let bytes =
+                bincode::encode_to_vec(data, bincode::config::standard()).expect("encode DFA");
+            let path = cli
+                .output
+                .expect("--output is required when using --emit bin");
+            fs::write(path, bytes).expect("write DFA");
         }
     }
 }

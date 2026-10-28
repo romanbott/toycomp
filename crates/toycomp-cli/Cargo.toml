@@ -4,10 +4,14 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+bin-tables = ["toycomp-syntax/serde", "dep:bincode"]
+
 [dependencies]
 toycomp-syntax = { path = "../toycomp-syntax" }
 toycomp-lang = { path = "../toycomp-lang" }
 clap = { version = "4.5.53", features = ["derive"] }
+bincode = { version = "2.0.1", features = ["serde"], optional = true }
 
 [[bin]]
 name = "compiler"

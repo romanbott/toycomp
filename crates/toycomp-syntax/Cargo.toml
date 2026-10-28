@@ -4,5 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+serde = ["dep:serde", "dep:bincode"]
+
 [dependencies]
 itertools = "0.14.0"
+serde = { version = "1.0.228", features = ["derive"], optional = true }
+bincode = { version = "2.0.1", features = ["serde"], optional = true }

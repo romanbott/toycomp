@@ -14,6 +14,10 @@ use crate::{
     tree_builder::TreeBuilder,
 };
 
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize, bincode::Encode, bincode::Decode)
+)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
     Error,
@@ -119,6 +123,10 @@ impl Table {
 }
 
 /// Owned table data, used by the generators.
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize, bincode::Encode, bincode::Decode)
+)]
 pub struct TableData {
     pub initial_state: u16,
     pub n_terminals: u16,

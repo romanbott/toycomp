@@ -33,10 +33,20 @@ cargo run --release --bin lexgen    -- crates/toycomp-lang/spec/toy.lang.lex --e
 cargo run --release --bin regex-cli -- 'a+b' 'aaab'
 ```
 
-`parsergen` and `lexgen` also support `--emit rs --output <file>`:
-they print the same `Table`/`StaticDFA` source that `build.rs` generates.
-`lexgen --emit dot` prints the minimized DFA. They depend only on
-`toycomp-syntax`.
+`--emit rs` prints the same `Table`/`StaticDFA` source that `build.rs`
+generates, and `lexgen --emit dot` prints the minimized DFA.
+
+`--emit bin` (bincode of the compact `TableData`/`DfaData`) is opt-in and
+only exists for external consumers/debugging:
+
+```
+cargo build --release -p toycomp-cli --features bin-tables
+cargo run   --release -p toycomp-cli --features bin-tables --bin parsergen -- \
+    crates/toycomp-lang/spec/toy.lang.grammar --emit bin -o table.bin
+```
+
+The compiler never enables `bin-tables`, so its build has no serde/bincode
+dependency.
 
 ## About the implemented language
 
