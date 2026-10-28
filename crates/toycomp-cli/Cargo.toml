@@ -1,0 +1,27 @@
+[package]
+name = "toycomp-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+toycomp-syntax = { path = "../toycomp-syntax" }
+toycomp-lang = { path = "../toycomp-lang" }
+clap = { version = "4.5.53", features = ["derive"] }
+bincode = { version = "2.0.1", features = ["serde"] }
+
+[[bin]]
+name = "compiler"
+path = "src/bin/compiler.rs"
+
+[[bin]]
+name = "lexgen"
+path = "src/bin/lexgen.rs"
+
+[[bin]]
+name = "parsergen"
+path = "src/bin/parsergen.rs"
+
+[[bin]]
+name = "regex-cli"
+path = "src/bin/regex_cli.rs"

@@ -1,23 +1,24 @@
-[package]
-name = "toycomp"
+[workspace]
+members = [
+    "crates/toycomp-syntax",
+    "crates/toycomp-lang",
+    "crates/toycomp-cli",
+]
+resolver = "3"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
-
-[[bin]]
-name = "regex-cli"
-
-[[bin]]
-name = "compiler"
-
-[[bin]]
-name = "automata_generator"
-
-[dependencies]
-bincode = { version = "2.0.1", features = ["serde"] }
-clap = { version = "4.5.53", features = ["derive"] }
-itertools = "0.14.0"
-serde = { version = "1.0.228", features = ["derive"] }
+license = "MIT"
 
 [profile.release]
 lto = "fat"
 debug = true
+
+# The LALR/DFA generators run inside build scripts. Keep them optimized even
+# for `cargo test` / `cargo build` in the dev profile.
+[profile.dev.build-override]
+opt-level = 3
+
+[profile.release.build-override]
+opt-level = 3
