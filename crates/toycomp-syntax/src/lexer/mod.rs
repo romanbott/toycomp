@@ -65,11 +65,11 @@ impl std::error::Error for LexingError {}
 impl Lexer {
     pub fn consume(&self, input: &str) -> Result<Vec<Token>, LexingError> {
         let dfa: TaggedDFA = self.into();
-        self.consume_with(&dfa.minimize(), input)
+        Self::scan(&dfa.minimize(), input)
     }
 
     /// Scans `input` with an already compiled DFA.
-    pub fn consume_with(&self, min: &TaggedDFA, input: &str) -> Result<Vec<Token>, LexingError> {
+    pub fn scan<D: Dfa>(dfa: &D, input: &str) -> Result<Vec<Token>, LexingError> {
         let mut token_begin = 0;
         let mut scan = 0;
 
@@ -82,7 +82,7 @@ impl Lexer {
             let mut last_lenght = 0;
             let mut last_tag = "";
             while scan < len + 1 {
-                if let Some(tag) = min.accept(&input[token_begin..scan]) {
+                if let Some(tag) = accept(dfa, &input[token_begin..scan]) {
                     last_tag = tag;
                     last_lenght = scan - token_begin;
                 }
@@ -116,6 +116,135 @@ impl Lexer {
         }
 
         Ok(tokens)
+    }
+}
+
+/// A deterministic automaton that can drive `Lexer::scan`.
+pub trait Dfa {
+    fn initial(&self) -> usize;
+    fn step(&self, state: usize, c: char) -> Option<usize>;
+    fn tag(&self, state: usize) -> Option<&str>;
+}
+
+fn accept<'d, D: Dfa>(dfa: &'d D, input: &str) -> Option<&'d str> {
+    let mut state = dfa.initial();
+    for c in input.chars() {
+        state = dfa.step(state, c)?;
+    }
+    dfa.tag(state)
+}
+
+impl Dfa for TaggedDFA {
+    fn initial(&self) -> usize {
+        TaggedDFA::initial_state(self)
+    }
+
+    fn step(&self, state: usize, c: char) -> Option<usize> {
+        self.move_c(state, c)
+    }
+
+    fn tag(&self, state: usize) -> Option<&str> {
+        TaggedDFA::tag(self, state)
+    }
+}
+
+/// A DFA in `&'static` form, emitted by `build.rs`/`lexgen`.
+pub struct StaticDFA {
+    pub initial_state: u16,
+    pub transitions: &'static [&'static [(char, u16)]],
+    /// One entry per state: tag id, or `u16::MAX` if not final.
+    pub final_tag: &'static [u16],
+    pub tag_names: &'static [&'static str],
+}
+
+impl Dfa for StaticDFA {
+    fn initial(&self) -> usize {
+        self.initial_state as usize
+    }
+
+    fn step(&self, state: usize, c: char) -> Option<usize> {
+        self.transitions
+            .get(state)?
+            .iter()
+            .find_map(|(label, target)| (*label == c).then_some(*target as usize))
+    }
+
+    fn tag(&self, state: usize) -> Option<&str> {
+        let tag = *self.final_tag.get(state)?;
+        if tag == u16::MAX {
+            None
+        } else {
+            self.tag_names.get(tag as usize).copied()
+        }
+    }
+}
+
+/// Owned DFA data, used by the generators.
+pub struct DfaData {
+    pub initial_state: u16,
+    pub transitions: Vec<Vec<(char, u16)>>,
+    pub final_tag: Vec<u16>,
+    pub tag_names: Vec<String>,
+}
+
+impl DfaData {
+    pub fn from_tagged(dfa: &TaggedDFA) -> Self {
+        let transitions = dfa
+            .transitions()
+            .iter()
+            .map(|row| row.iter().map(|a| (a.label(), a.target() as u16)).collect())
+            .collect();
+
+        let mut tag_names: Vec<String> = Vec::new();
+        let mut final_tag = vec![u16::MAX; dfa.num_states()];
+        for (state, tag) in dfa.final_state_tags() {
+            let id = match tag_names.iter().position(|t| t == tag) {
+                Some(id) => id,
+                None => {
+                    tag_names.push(tag.clone());
+                    tag_names.len() - 1
+                }
+            };
+            final_tag[*state] = id as u16;
+        }
+
+        DfaData {
+            initial_state: dfa.initial_state() as u16,
+            transitions,
+            final_tag,
+            tag_names,
+        }
+    }
+
+    pub fn to_rust_source(&self) -> String {
+        let mut out = String::new();
+        out.push_str("use toycomp_syntax::StaticDFA;\n\n");
+        out.push_str("pub static DFA: StaticDFA = StaticDFA {\n");
+        use std::fmt::Write as _;
+        writeln!(out, "    initial_state: {},", self.initial_state).unwrap();
+        out.push_str("    transitions: &[\n");
+        for row in &self.transitions {
+            out.push_str("        &[");
+            for (i, (label, target)) in row.iter().enumerate() {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                write!(out, "({label:?}, {target})").unwrap();
+            }
+            out.push_str("],\n");
+        }
+        out.push_str("    ],\n");
+        writeln!(out, "    final_tag: &{:?},", self.final_tag).unwrap();
+        out.push_str("    tag_names: &[");
+        for (i, tag) in self.tag_names.iter().enumerate() {
+            if i > 0 {
+                out.push_str(", ");
+            }
+            write!(out, "{tag:?}").unwrap();
+        }
+        out.push_str("],\n");
+        out.push_str("};\n");
+        out
     }
 }
 

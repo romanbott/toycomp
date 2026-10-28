@@ -1,6 +1,6 @@
 use std::{env, fs, path::PathBuf};
 
-use toycomp_syntax::{Grammar, LALRAutomaton, Lexer, OLALRAutomaton, TaggedDFA};
+use toycomp_syntax::{DfaData, Grammar, LALRAutomaton, Lexer, TableData, TaggedDFA};
 
 const GRAMMAR_SPEC: &str = "spec/toy.lang.grammar";
 const LEXER_SPEC: &str = "spec/toy.lang.lex";
@@ -14,17 +14,14 @@ fn main() {
         .expect("parse grammar spec")
         .augment();
     let lalr = LALRAutomaton::from_grammar(&grammar);
-    let owned: OLALRAutomaton = (&lalr).into();
+    let table = TableData::from_lalr(&grammar, &lalr);
 
     let lexer_src = fs::read_to_string(LEXER_SPEC).expect("read lexer spec");
     let lexer: Lexer = lexer_src.parse().expect("parse lexer spec");
     let dfa = TaggedDFA::from(&lexer).minimize();
-
-    let config = bincode::config::standard();
-    let lalr_bytes = bincode::encode_to_vec(owned, config).expect("encode LALR table");
-    let dfa_bytes = bincode::encode_to_vec(dfa, config).expect("encode lexer DFA");
+    let dfa_data = DfaData::from_tagged(&dfa);
 
     let out = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR"));
-    fs::write(out.join("lalr.bin"), lalr_bytes).expect("write lalr.bin");
-    fs::write(out.join("lexer.bin"), dfa_bytes).expect("write lexer.bin");
+    fs::write(out.join("lalr_table.rs"), table.to_rust_source()).expect("write lalr_table.rs");
+    fs::write(out.join("lexer_table.rs"), dfa_data.to_rust_source()).expect("write lexer_table.rs");
 }

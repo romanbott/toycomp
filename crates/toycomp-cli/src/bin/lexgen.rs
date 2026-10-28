@@ -1,7 +1,7 @@
 use std::{fs, path::PathBuf};
 
 use clap::{Parser, ValueEnum};
-use toycomp_syntax::{Lexer, TaggedDFA};
+use toycomp_syntax::{DfaData, Lexer, TaggedDFA};
 
 #[derive(Parser)]
 #[command(author, version, about = "Build a minimized DFA from a lexer spec")]
@@ -13,7 +13,7 @@ struct Cli {
     #[arg(long, value_enum, default_value_t = Format::Stats)]
     emit: Format,
 
-    /// Output file. Required for `--emit bin`; defaults to stdout otherwise.
+    /// Output file. Defaults to stdout.
     #[arg(long, short)]
     output: Option<PathBuf>,
 }
@@ -22,7 +22,7 @@ struct Cli {
 enum Format {
     Stats,
     Dot,
-    Bin,
+    Rs,
 }
 
 fn main() {
@@ -39,13 +39,13 @@ fn main() {
         Format::Dot => {
             println!("{}", dfa.to_graphviz());
         }
-        Format::Bin => {
-            let output = cli
-                .output
-                .expect("--output is required when using --emit bin");
-            let bytes =
-                bincode::encode_to_vec(dfa, bincode::config::standard()).expect("encode lexer DFA");
-            fs::write(output, bytes).expect("write lexer DFA");
+        Format::Rs => {
+            let data = DfaData::from_tagged(&dfa);
+            let source = data.to_rust_source();
+            match cli.output {
+                Some(path) => fs::write(path, source).expect("write lexer source"),
+                None => print!("{source}"),
+            }
         }
     }
 }

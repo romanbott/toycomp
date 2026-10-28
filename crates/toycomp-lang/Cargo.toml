@@ -6,8 +6,6 @@ license.workspace = true
 
 [dependencies]
 toycomp-syntax = { path = "../toycomp-syntax" }
-bincode = { version = "2.0.1", features = ["serde"] }
 
 [build-dependencies]
 toycomp-syntax = { path = "../toycomp-syntax" }
-bincode = { version = "2.0.1", features = ["serde"] }

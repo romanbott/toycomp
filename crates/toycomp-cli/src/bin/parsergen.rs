@@ -1,10 +1,10 @@
 use std::{fs, path::PathBuf};
 
 use clap::{Parser, ValueEnum};
-use toycomp_syntax::{Grammar, LALRAutomaton, OLALRAutomaton};
+use toycomp_syntax::{Grammar, LALRAutomaton, TableData};
 
 #[derive(Parser)]
-#[command(author, version, about = "Build a LALR(1) table from a grammar")]
+#[command(author, version, about = "Build LALR(1) tables from a grammar")]
 struct Cli {
     /// Grammar file to read.
     input: PathBuf,
@@ -13,7 +13,7 @@ struct Cli {
     #[arg(long, value_enum, default_value_t = Format::Stats)]
     emit: Format,
 
-    /// Output file. Required for `--emit bin`; defaults to stdout otherwise.
+    /// Output file. Defaults to stdout.
     #[arg(long, short)]
     output: Option<PathBuf>,
 }
@@ -21,7 +21,7 @@ struct Cli {
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum Format {
     Stats,
-    Bin,
+    Rs,
 }
 
 fn main() {
@@ -52,14 +52,13 @@ fn main() {
                 lalr.initial_state
             );
         }
-        Format::Bin => {
-            let output = cli
-                .output
-                .expect("--output is required when using --emit bin");
-            let owned: OLALRAutomaton = (&lalr).into();
-            let bytes = bincode::encode_to_vec(owned, bincode::config::standard())
-                .expect("encode LALR table");
-            fs::write(output, bytes).expect("write LALR table");
+        Format::Rs => {
+            let data = TableData::from_lalr(&grammar, &lalr);
+            let source = data.to_rust_source();
+            match cli.output {
+                Some(path) => fs::write(path, source).expect("write table source"),
+                None => print!("{source}"),
+            }
         }
     }
 }

@@ -1,22 +1,24 @@
-use toycomp_syntax::{Lexer, OLALRAutomaton, TaggedDFA, TreeBuilder};
+use toycomp_syntax::{Lexer, StaticDFA, Table, TreeBuilder};
 
-use crate::lang::lexer::LEXER;
+mod lalr_table {
+    include!(concat!(env!("OUT_DIR"), "/lalr_table.rs"));
+}
+
+mod lexer_table {
+    include!(concat!(env!("OUT_DIR"), "/lexer_table.rs"));
+}
 
 pub struct Parser<T, A>
 where
     T: TreeBuilder<Tree = A>,
 {
-    lexer: Lexer,
-    dfa: TaggedDFA,
+    dfa: &'static StaticDFA,
+    table: &'static Table,
     ast_builder: T,
-    lalr_automaton: OLALRAutomaton,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct ParsingError(String);
-
-const LALR_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/lalr.bin"));
-const LEXER_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/lexer.bin"));
 
 impl<T, A> Parser<T, A>
 where
@@ -24,35 +26,23 @@ where
     A: std::fmt::Debug,
 {
     pub fn parse(self, program: &str) -> Result<A, ParsingError> {
-        let tokens = self
-            .lexer
-            .consume_with(&self.dfa, program)
-            .map_err(|e| ParsingError(e.to_string()))?;
+        let tokens = Lexer::scan(self.dfa, program).map_err(|e| ParsingError(e.to_string()))?;
 
         let mut non_white_space: Vec<_> = tokens
             .into_iter()
             .filter(|tok| tok.tag != "WHITE_SPACE")
             .collect();
 
-        let res = self
-            .lalr_automaton
-            .parse(&mut non_white_space, self.ast_builder);
+        let res = self.table.parse(&mut non_white_space, self.ast_builder);
 
         res.map_err(|e| ParsingError(e.to_string()))
     }
 
     pub fn new() -> Self {
-        let config = bincode::config::standard();
-
-        let (lalr_automaton, _) =
-            bincode::decode_from_slice::<OLALRAutomaton, _>(LALR_BYTES, config).unwrap();
-        let (dfa, _) = bincode::decode_from_slice::<TaggedDFA, _>(LEXER_BYTES, config).unwrap();
-
         Parser {
-            lexer: LEXER.clone(),
-            dfa,
+            dfa: &lexer_table::DFA,
+            table: &lalr_table::TABLE,
             ast_builder: T::default(),
-            lalr_automaton,
         }
     }
 }

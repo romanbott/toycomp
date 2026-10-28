@@ -1,15 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use bincode::{Decode, Encode};
-use serde::{Deserialize, Serialize};
-
 use crate::automata::NDFA;
 
 use super::tagged_ndfa::TaggedNDFA;
 
 use itertools::Itertools;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LabeledArrow {
     label: char,
     target: usize,
@@ -18,6 +15,14 @@ pub struct LabeledArrow {
 impl LabeledArrow {
     fn to_graphviz(&self, source: &usize) -> String {
         format!("{} -> {} [label={}]", source, self.target, self.label)
+    }
+
+    pub fn label(&self) -> char {
+        self.label
+    }
+
+    pub fn target(&self) -> usize {
+        self.target
     }
 
     fn move_c(&self, char: char) -> Option<usize> {
@@ -38,7 +43,7 @@ impl From<(char, usize)> for LabeledArrow {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DTable(pub Vec<Vec<LabeledArrow>>);
 
 impl DTable {
@@ -184,7 +189,7 @@ impl From<NDFA> for DFA {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TaggedDFA {
     /// Table of transitions, each row represents a state.
     table: DTable,
@@ -238,6 +243,22 @@ subgraph cluster_final_state_{} {{
     }
     pub fn num_states(&self) -> usize {
         self.table.0.len()
+    }
+
+    pub fn initial_state(&self) -> usize {
+        self.initial_state
+    }
+
+    pub fn tag(&self, state: usize) -> Option<&str> {
+        self.final_states.get(&state).map(String::as_str)
+    }
+
+    pub fn transitions(&self) -> &[Vec<LabeledArrow>] {
+        &self.table.0
+    }
+
+    pub fn final_state_tags(&self) -> &BTreeMap<usize, String> {
+        &self.final_states
     }
 
     pub fn move_c(&self, state: usize, char: char) -> Option<usize> {
