@@ -18,6 +18,13 @@ mod tests {
     }
 
     #[test]
+    fn non_ascii_is_reported_not_panicked() {
+        let lexer: Lexer = LEXER_STRING.parse().unwrap();
+
+        assert!(lexer.consume("let x: int = 1; é").is_err());
+    }
+
+    #[test]
     fn complex_lexing() {
         let lexer: Lexer = LEXER_STRING.parse().unwrap();
 

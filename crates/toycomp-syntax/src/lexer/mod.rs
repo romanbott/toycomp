@@ -69,50 +69,62 @@ impl Lexer {
     }
 
     /// Scans `input` with an already compiled DFA.
+    ///
+    /// This is a single pass: each token walks the DFA only as far as that
+    /// token can possibly go, instead of re-running it over every prefix of the
+    /// remaining input.
     pub fn scan<D: Dfa>(dfa: &D, input: &str) -> Result<Vec<Token>, LexingError> {
-        let mut token_begin = 0;
-        let mut scan = 0;
-
         let len = input.len();
         let mut tokens = Vec::new();
-        let mut current_line = 0;
-        let mut current_char = 0;
+        let mut token_begin = 0;
+        let mut line = 0;
+        let mut column = 0;
 
         while token_begin < len {
-            let mut last_lenght = 0;
-            let mut last_tag = "";
-            while scan < len + 1 {
-                if let Some(tag) = accept(dfa, &input[token_begin..scan]) {
-                    last_tag = tag;
-                    last_lenght = scan - token_begin;
+            let rest = &input[token_begin..];
+            let mut state = dfa.initial();
+            let mut best: Option<(usize, &str)> = None;
+
+            for (offset, c) in rest.char_indices() {
+                match dfa.step(state, c) {
+                    Some(next) => {
+                        state = next;
+                        if let Some(tag) = dfa.tag(state) {
+                            best = Some((offset + c.len_utf8(), tag));
+                        }
+                    }
+                    None => break,
                 }
-                scan += 1;
             }
 
-            if last_lenght == 0 {
-                let end = (token_begin + 10).min(len); // Take up to 10 chars as context
-                let context = input[token_begin..end].to_string();
-
+            let Some((length, tag)) = best else {
+                let context = rest.chars().take(10).collect::<String>();
                 return Err(LexingError {
                     position: token_begin,
-                    parsed_tokens: tokens, // Return successfully parsed tokens up to this point
-                    context: context,
+                    parsed_tokens: tokens,
+                    context,
                 });
-            }
-            if &input.chars().nth(token_begin) == &Some('\n') {
-                current_line += 1;
-                current_char = 0
-            }
+            };
+
+            let end = token_begin + length;
+            let value = &input[token_begin..end];
 
             tokens.push(Token {
-                tag: last_tag.to_owned(),
-                value: input[token_begin..(token_begin + last_lenght)].to_owned(),
-                position: (current_line, current_char),
+                tag: tag.to_owned(),
+                value: value.to_owned(),
+                position: (line, column),
             });
 
-            current_char += last_lenght;
-            token_begin += last_lenght;
-            scan = token_begin;
+            for c in value.chars() {
+                if c == '\n' {
+                    line += 1;
+                    column = 0;
+                } else {
+                    column += 1;
+                }
+            }
+
+            token_begin = end;
         }
 
         Ok(tokens)
@@ -124,14 +136,6 @@ pub trait Dfa {
     fn initial(&self) -> usize;
     fn step(&self, state: usize, c: char) -> Option<usize>;
     fn tag(&self, state: usize) -> Option<&str>;
-}
-
-fn accept<'d, D: Dfa>(dfa: &'d D, input: &str) -> Option<&'d str> {
-    let mut state = dfa.initial();
-    for c in input.chars() {
-        state = dfa.step(state, c)?;
-    }
-    dfa.tag(state)
 }
 
 impl Dfa for TaggedDFA {
@@ -391,6 +395,29 @@ mod tests {
         .parse();
 
         assert!(lex.is_ok());
+    }
+
+    #[test]
+    fn positions_after_newline() {
+        let lex: Lexer = "ID->a|b\nWS->\\n".parse().unwrap();
+
+        let tokens = lex.consume("a\nb").unwrap();
+
+        let expected: Vec<Token> = vec![
+            ("ID", "a", 0, 0).into(),
+            ("WS", "\n", 0, 1).into(),
+            ("ID", "b", 1, 0).into(),
+        ];
+        assert_eq!(expected, tokens);
+    }
+
+    #[test]
+    fn non_ascii_is_an_error() {
+        let lex: Lexer = "ID->a|b\nOTHER->é".parse().unwrap();
+
+        // Must not panic on a UTF-8 boundary; it is simply an unmatched char.
+        assert!(lex.consume("aé").is_ok());
+        assert!(lex.consume("a@").is_err());
     }
 
     #[test]
