@@ -1,39 +1,40 @@
 # Toycomp
 
-Realy simple toy compiler implemented in rust.
+A small compiler for a toy imperative language, targeting the FIS-25 virtual machine.
 
-## How to use
+## Layout
 
-### To compile the compiler
+- `crates/toycomp-syntax` — reusable front-end toolkit: regular expressions,
+  automata, lexer, context-free grammars and LALR(1) table construction. It
+  knows nothing about the toy language.
+- `crates/toycomp-lang` — the toy language itself: AST, lexer/grammar specs,
+  type checker and code generator. Its `build.rs` compiles
+  `spec/toy.lang.lex` and `spec/toy.lang.grammar` into the lexer DFA and the
+  LALR table in `$OUT_DIR`, so the compiler does not build them at startup and
+  there is no artifact to check in.
+- `crates/toycomp-cli` — the binaries: `compiler`, `lexgen`, `parsergen` and
+  `regex-cli`.
 
-Since the algorithm to generate the LALR automaton for parsing is not very efficient, its necessary to precompute the automaton.
-
-First, there should be a file named: `toycomp_lalr_automaton.bin`
-
-```
-touch toycomp_lalr_automaton.bin
-```
-
-Then compile and run the `automata_generator` binary:
-
-```
-cargo build --release --bin automata_generator
-./target/release/automata_generator
-```
-
-This should replace the original `toycomp_lalr_automaton.bin` with the serialized LALR automaton.
-
-Next, compile the main binary:
+## Build and run
 
 ```
-cargo build --release --bin compiler
+cargo build --release
+./target/release/compiler compile --input examples/checkerboard.lang --output compiled
 ```
 
-Finally, try with the one of the examples:
+`cargo build` on a fresh clone is enough. `toycomp-lang/build.rs` reruns
+automatically when either spec file changes.
+
+## Tools
 
 ```
-./target/release/compiler compile --input examples/checkerboard.lang --out compiled
+cargo run --release --bin parsergen -- crates/toycomp-lang/spec/toy.lang.grammar --emit stats
+cargo run --release --bin lexgen    -- crates/toycomp-lang/spec/toy.lang.lex --emit stats
+cargo run --release --bin regex-cli -- 'a+b' 'aaab'
 ```
+
+`parsergen` and `lexgen` also support `--emit bin --output <file>` and
+`lexgen --emit dot`. They depend only on `toycomp-syntax`.
 
 ## About the implemented language
 
